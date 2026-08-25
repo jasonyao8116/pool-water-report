@@ -1,0 +1,2744 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<!--
+  ============================================================
+  泳池水质检测报告生成器 PWA v2.5
+  ============================================================
+  功能：泳池水质检测数据录入 · 自动评价 · 报告预览 · 图片导出
+  v2.5 更新：整合万消灵/蓝清透/泳蓝净/澄爽宝/泳之水/泳泉霸等13款真实产品数据，
+  异常指标自动匹配对应药剂名称、精确用量计算和使用注意事项
+
+  【添加到桌面使用方法】
+  iOS Safari：点击底部分享图标 → 添加到主屏幕
+  Android Chrome：点击右上角菜单 → 添加到主屏幕 / 安装应用
+  其他浏览器：查找"添加到主屏幕"或"安装应用"选项
+
+  技术栈：HTML5 + CSS3 + Vanilla JS + html2canvas
+  特性：纯前端 · PWA · 本地存储 · 离线可用 · 响应式设计
+  ============================================================
+-->
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
+<meta name="theme-color" content="#1a5276">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="水质检测">
+<meta name="description" content="泳池水质检测报告生成器，支持数据录入、自动评价、图片导出">
+<title>泳池水质检测报告</title>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+:root {
+  --primary: #1a5276;
+  --primary-light: #2e86c1;
+  --bg: #eef3f7;
+  --card: #ffffff;
+  --text: #2c3e50;
+  --text-light: #7f8c8d;
+  --border: #e0e6ed;
+  --normal-bg: #d4edda;
+  --normal-text: #155724;
+  --high-bg: #f8d7da;
+  --high-text: #721c24;
+  --low-bg: #fff3cd;
+  --low-text: #856404;
+  --none-bg: #e9ecef;
+  --none-text: #6c757d;
+  --row-abnormal: #fff8f5;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html { font-size: 16px; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ===== Header ===== */
+.header {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+  color: white;
+  padding: 14px 16px calc(14px + env(safe-area-inset-top, 0)) 16px;
+  padding-top: calc(14px + env(safe-area-inset-top, 0));
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  box-shadow: 0 2px 12px rgba(26,82,118,0.3);
+}
+.header-inner { display: flex; align-items: center; gap: 10px; }
+.header-icon {
+  width: 36px; height: 36px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px;
+  flex-shrink: 0;
+}
+.header-text h1 { font-size: 17px; font-weight: 700; letter-spacing: 0.5px; }
+.header-text p { font-size: 11px; opacity: 0.85; margin-top: 1px; letter-spacing: 1px; }
+
+/* ===== Tabs ===== */
+.tabs {
+  display: flex;
+  background: var(--card);
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  position: sticky;
+  top: calc(64px + env(safe-area-inset-top, 0px));
+  z-index: 99;
+}
+.tab {
+  flex: 1;
+  padding: 13px 8px;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-light);
+  border-bottom: 3px solid transparent;
+  cursor: pointer;
+  transition: all 0.2s;
+  user-select: none;
+  position: relative;
+}
+.tab .tab-icon { margin-right: 4px; }
+.tab.active {
+  color: var(--primary-light);
+  border-bottom-color: var(--primary-light);
+  background: #f7fbfe;
+}
+
+/* ===== Content & Panels ===== */
+.content { padding: 12px 12px 80px 12px; max-width: 720px; margin: 0 auto; }
+.panel { display: none; }
+.panel.active { display: block; animation: fadeIn 0.2s ease; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ===== Section Card ===== */
+.section {
+  background: var(--card);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 12px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+}
+.section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--primary);
+  margin-bottom: 14px;
+  padding-left: 10px;
+  border-left: 4px solid var(--primary-light);
+  line-height: 1.3;
+}
+.section-title.collapsible {
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.section-title.collapsible:hover {
+  opacity: 0.8;
+}
+.collapse-arrow {
+  font-size: 12px;
+  transition: transform 0.3s ease;
+  display: inline-block;
+}
+.collapsible-content {
+  overflow: hidden;
+  transition: max-height 0.3s ease, opacity 0.3s ease;
+}
+.collapsible-content.collapsed {
+  max-height: 0;
+  opacity: 0;
+  margin: 0;
+  padding: 0;
+}
+.collapsible-content.expanded {
+  max-height: 2000px;
+  opacity: 1;
+}
+
+/* Water Name Dropdown */
+.water-name-dropdown-btn {
+  width: 38px;
+  min-height: 38px;
+  border: 1px solid #cbd5e0;
+  border-radius: 8px;
+  background: var(--primary-light);
+  color: white;
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.water-name-dropdown-btn:active {
+  background: var(--primary);
+}
+.form-group:has(.water-name-dropdown) {
+  position: relative;
+}
+.water-name-dropdown {
+  display: none;
+  position: absolute;
+  left: 0;
+  right: 0;
+  z-index: 100;
+  background: white;
+  border: 1px solid #cbd5e0;
+  border-radius: 8px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+  max-height: 220px;
+  overflow-y: auto;
+  margin-top: 2px;
+}
+.water-name-dropdown.show {
+  display: block;
+}
+.water-name-option {
+  padding: 10px 14px;
+  font-size: 14px;
+  cursor: pointer;
+  border-bottom: 1px solid #f0f0f0;
+}
+.water-name-option:last-child {
+  border-bottom: none;
+}
+.water-name-option:active,
+.water-name-option:hover {
+  background: #e8f4fd;
+  color: var(--primary);
+}
+
+/* ===== Form Elements ===== */
+.form-group { margin-bottom: 14px; }
+.form-group:last-child { margin-bottom: 0; }
+.form-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #4a5568;
+  margin-bottom: 6px;
+}
+.form-label .required { color: #e74c3c; margin-left: 2px; }
+.form-input {
+  width: 100%;
+  padding: 11px 12px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  font-size: 15px;
+  color: var(--text);
+  background: #fafbfc;
+  transition: border-color 0.2s, background 0.2s;
+  appearance: none;
+  -webkit-appearance: none;
+}
+.form-input:focus {
+  outline: none;
+  border-color: var(--primary-light);
+  background: white;
+  box-shadow: 0 0 0 3px rgba(46,134,193,0.1);
+}
+.form-input::placeholder { color: #c0c7d0; }
+
+.input-row { display: flex; gap: 8px; align-items: stretch; }
+.input-row .form-input { flex: 1; }
+.input-row select {
+  padding: 11px 10px;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  font-size: 15px;
+  background: #fafbfc;
+  color: var(--text);
+  min-width: 70px;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%237f8c8d' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  padding-right: 28px;
+}
+
+/* ===== Radio Group ===== */
+.radio-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 2px;
+}
+.radio-item { position: relative; }
+.radio-item input { position: absolute; opacity: 0; width: 0; height: 0; }
+.radio-item label {
+  display: inline-block;
+  padding: 8px 13px;
+  border: 1.5px solid var(--border);
+  border-radius: 20px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  background: #fafbfc;
+  color: #5a6a7a;
+  transition: all 0.2s;
+  user-select: none;
+  white-space: nowrap;
+}
+.radio-item input:checked + label {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+  color: white;
+  border-color: var(--primary-light);
+  box-shadow: 0 2px 6px rgba(46,134,193,0.25);
+}
+.radio-item label:active { transform: scale(0.96); }
+
+/* ===== Indicator Row ===== */
+.indicator-list { display: flex; flex-direction: column; gap: 8px; }
+.indicator-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 10px;
+  background: #f8fafc;
+  border-radius: 8px;
+  border: 1.5px solid transparent;
+  transition: border-color 0.2s, background 0.2s;
+}
+.indicator-row.status-normal { background: #f0fff4; border-color: #c6f6d5; }
+.indicator-row.status-high { background: #fff5f5; border-color: #fed7d7; }
+.indicator-row.status-low { background: #fffdf0; border-color: #fefcbf; }
+.ind-name {
+  flex: 0 0 auto;
+  font-size: 13px;
+  font-weight: 600;
+  color: #2d3748;
+  min-width: 72px;
+}
+.ind-input {
+  flex: 1;
+  min-width: 0;
+  padding: 8px 10px;
+  border: 1.5px solid #dce3ec;
+  border-radius: 6px;
+  font-size: 15px;
+  color: var(--text);
+  background: white;
+  text-align: center;
+  transition: border-color 0.2s;
+}
+.ind-input:focus {
+  outline: none;
+  border-color: var(--primary-light);
+  box-shadow: 0 0 0 2px rgba(46,134,193,0.12);
+}
+.ind-input::placeholder { color: #c0c7d0; font-size: 13px; }
+.ind-input.ind-calculated {
+  background: #f0f7fc;
+  color: var(--primary);
+  font-weight: 600;
+  border-style: dashed;
+  border-color: var(--primary-light);
+  cursor: default;
+  opacity: 0.9;
+}
+.ind-unit {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--text-light);
+  min-width: 36px;
+  text-align: left;
+}
+.ind-range {
+  flex: 0 0 auto;
+  font-size: 11px;
+  color: var(--primary-light);
+  background: #e8f4fd;
+  padding: 2px 7px;
+  border-radius: 10px;
+  white-space: nowrap;
+  font-weight: 600;
+}
+.ind-badge {
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+  min-width: 44px;
+  text-align: center;
+  background: var(--none-bg);
+  color: var(--none-text);
+}
+.ind-badge.normal { background: var(--normal-bg); color: var(--normal-text); }
+.ind-badge.high { background: var(--high-bg); color: var(--high-text); }
+.ind-badge.low { background: var(--low-bg); color: var(--low-text); }
+
+/* ===== Buttons ===== */
+.btn {
+  width: 100%;
+  padding: 14px;
+  border: none;
+  border-radius: 10px;
+  font-size: 16px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s;
+  margin-bottom: 8px;
+  user-select: none;
+  letter-spacing: 0.5px;
+}
+.btn:active { transform: translateY(1px); }
+.btn:disabled { opacity: 0.6; pointer-events: none; }
+.btn-primary {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+  color: white;
+  box-shadow: 0 3px 10px rgba(46,134,193,0.3);
+}
+.btn-success {
+  background: linear-gradient(135deg, #1e8449 0%, #27ae60 100%);
+  color: white;
+  box-shadow: 0 3px 10px rgba(39,174,96,0.3);
+}
+.btn-secondary {
+  background: #edf2f7;
+  color: #4a5568;
+  box-shadow: none;
+}
+.btn-danger {
+  background: #fff5f5;
+  color: #c53030;
+  border: 1.5px solid #fed7d7;
+}
+
+/* ===== Report Preview ===== */
+.report-wrapper {
+  background: var(--card);
+  border-radius: 12px;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+}
+.report {
+  background: white;
+  padding: 20px 16px;
+  font-size: 13px;
+  color: #1a202c;
+}
+.report-head {
+  text-align: center;
+  padding-bottom: 16px;
+  margin-bottom: 16px;
+  border-bottom: 2px solid var(--primary-light);
+  position: relative;
+}
+.report-head::after {
+  content: '';
+  position: absolute;
+  bottom: -5px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60%;
+  height: 1px;
+  background: var(--primary-light);
+  opacity: 0.4;
+}
+.report-company {
+  font-size: 20px;
+  font-weight: 800;
+  color: var(--primary);
+  letter-spacing: 2px;
+  margin-bottom: 4px;
+}
+.report-title {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--primary-light);
+  letter-spacing: 4px;
+  margin-bottom: 6px;
+}
+.report-subtitle {
+  font-size: 10px;
+  color: var(--text-light);
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.report-section { margin-bottom: 16px; }
+.report-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--primary);
+  margin-bottom: 8px;
+  padding: 4px 10px;
+  background: #e8f4fd;
+  border-left: 4px solid var(--primary-light);
+  border-radius: 0 4px 4px 0;
+}
+.report-section-title.report-collapsible {
+  cursor: pointer;
+  user-select: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.report-section-title.report-collapsible:hover {
+  background: #d6ecf8;
+}
+.report-collapse-arrow {
+  font-size: 10px;
+  transition: transform 0.3s ease;
+  display: inline-block;
+}
+.report-collapsible-content {
+  overflow: hidden;
+  transition: max-height 0.3s ease, opacity 0.3s ease;
+}
+.report-collapsible-content.collapsed {
+  max-height: 0;
+  opacity: 0;
+  margin: 0;
+  padding: 0;
+}
+.report-collapsible-content.expanded {
+  max-height: 1000px;
+  opacity: 1;
+}
+
+/* Info Table */
+.info-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid #cbd5e0;
+  font-size: 12.5px;
+}
+.info-table td {
+  padding: 7px 9px;
+  border: 1px solid #cbd5e0;
+  word-break: break-all;
+}
+.info-table .lbl {
+  background: #edf2f7;
+  font-weight: 600;
+  color: #4a5568;
+  width: 28%;
+  white-space: nowrap;
+}
+.info-table .val {
+  background: white;
+  color: #1a202c;
+}
+
+/* Data Table */
+.data-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid #cbd5e0;
+  font-size: 12px;
+}
+.data-table thead th {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%);
+  color: white;
+  padding: 9px 4px;
+  font-weight: 600;
+  font-size: 11.5px;
+  text-align: center;
+  border: 1px solid var(--primary);
+  letter-spacing: 0.5px;
+}
+.data-table tbody td {
+  padding: 8px 4px;
+  text-align: center;
+  border: 1px solid #cbd5e0;
+  font-size: 12px;
+  vertical-align: middle;
+}
+.data-table tbody td.col-name { text-align: left; padding-left: 8px; font-weight: 500; }
+.data-table tbody tr:nth-child(even) { background: #f7fafc; }
+.data-table tbody tr.row-abnormal { background: #fff5f0 !important; }
+
+/* Status Badge in Report */
+.rbadge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+  letter-spacing: 0.3px;
+}
+.rbadge-normal { background: var(--normal-bg); color: var(--normal-text); }
+.rbadge-high { background: var(--high-bg); color: var(--high-text); }
+.rbadge-low { background: var(--low-bg); color: var(--low-text); }
+.rbadge-none { background: var(--none-bg); color: var(--none-text); }
+
+/* Summary */
+.report-summary {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+  padding: 10px;
+  background: #f7fafc;
+  border-radius: 8px;
+}
+.summary-item {
+  flex: 1;
+  min-width: 60px;
+  text-align: center;
+  padding: 6px 4px;
+  border-radius: 6px;
+  font-size: 11px;
+  font-weight: 700;
+}
+.summary-total { background: #e8f4fd; color: var(--primary); }
+.summary-normal { background: var(--normal-bg); color: var(--normal-text); }
+.summary-high { background: var(--high-bg); color: var(--high-text); }
+.summary-low { background: var(--low-bg); color: var(--low-text); }
+.summary-num { display: block; font-size: 18px; font-weight: 800; margin-bottom: 1px; }
+
+/* Report Footer */
+.report-foot {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px dashed #a0aec0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  font-size: 11.5px;
+  color: var(--text-light);
+}
+.report-foot-col { display: flex; flex-direction: column; gap: 3px; }
+.report-foot .company-stamp {
+  font-weight: 700;
+  color: var(--primary);
+  font-size: 12px;
+}
+
+/* ===== Image Result ===== */
+.image-section {
+  margin-top: 12px;
+  background: var(--card);
+  border-radius: 12px;
+  padding: 14px;
+  box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  text-align: center;
+}
+.image-section img {
+  max-width: 100%;
+  height: auto;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  display: block;
+  margin: 0 auto 12px;
+  touch-action: manipulation;
+}
+.image-tip {
+  font-size: 12px;
+  color: var(--text-light);
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+
+/* ===== Loading ===== */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s;
+}
+.loading-overlay.show { opacity: 1; pointer-events: auto; }
+.loading-box {
+  background: white;
+  border-radius: 16px;
+  padding: 28px 36px;
+  text-align: center;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.2);
+}
+.loading-spinner {
+  width: 40px; height: 40px;
+  border: 4px solid #e2e8f0;
+  border-top-color: var(--primary-light);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin: 0 auto 12px;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+.loading-text { font-size: 14px; font-weight: 600; color: var(--text); }
+
+/* ===== Toast ===== */
+.toast {
+  position: fixed;
+  bottom: calc(24px + env(safe-area-inset-bottom, 0px));
+  left: 50%;
+  transform: translateX(-50%) translateY(80px);
+  background: rgba(26,32,44,0.9);
+  color: white;
+  padding: 11px 22px;
+  border-radius: 22px;
+  font-size: 14px;
+  font-weight: 500;
+  z-index: 2000;
+  opacity: 0;
+  transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
+  pointer-events: none;
+  max-width: calc(100vw - 40px);
+  text-align: center;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.3);
+}
+.toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+/* ===== Empty State ===== */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: var(--text-light);
+}
+.empty-state .empty-icon { font-size: 48px; margin-bottom: 12px; opacity: 0.6; }
+.empty-state p { font-size: 14px; line-height: 1.6; }
+
+/* ===== History Items ===== */
+.history-card {
+  background: #f8fafc;
+  border: 1.5px solid var(--border);
+  border-radius: 10px;
+  padding: 12px;
+  margin-bottom: 8px;
+  transition: border-color 0.2s;
+}
+.history-card:active { border-color: var(--primary-light); }
+.history-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.history-pool { font-size: 14px; font-weight: 700; color: var(--primary); }
+.history-date { font-size: 12px; color: var(--text-light); }
+.history-stats {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+  color: var(--text);
+}
+.history-stats .hs-item {
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 3px 8px;
+}
+.history-stats .hs-label { color: var(--text-light); margin-right: 4px; }
+.history-card-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+.history-card-actions button {
+  flex: 1;
+  padding: 7px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  background: white;
+  color: var(--text);
+  transition: all 0.15s;
+}
+.history-card-actions button:active { background: var(--bg); }
+.history-card-actions .btn-view { color: var(--primary-light); border-color: var(--primary-light); }
+.history-card-actions .btn-delete { color: #e74c3c; border-color: #fca5a5; }
+
+/* ===== Responsive ===== */
+@media (max-width: 360px) {
+  .ind-name { min-width: 62px; font-size: 12px; }
+  .ind-range { display: none; }
+  .ind-unit { min-width: 30px; font-size: 10px; }
+  .report-company { font-size: 17px; }
+  .report-title { font-size: 15px; letter-spacing: 2px; }
+  .data-table { font-size: 11px; }
+  .data-table thead th { font-size: 10.5px; padding: 7px 2px; }
+  .data-table tbody td { padding: 6px 2px; font-size: 11px; }
+}
+
+/* ===== Recommendation Cards ===== */
+.rec-section { margin-bottom: 14px; }
+.rec-all-ok {
+  padding: 12px 14px;
+  background: #d4edda;
+  border-radius: 8px;
+  border-left: 4px solid #28a745;
+  font-size: 13px;
+  font-weight: 600;
+  color: #155724;
+  text-align: center;
+  line-height: 1.6;
+}
+.rec-card {
+  background: #fffbf5;
+  border: 1px solid #f0e0c8;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 8px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.rec-card:last-child { margin-bottom: 0; }
+.rec-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+  flex-wrap: wrap;
+}
+.rec-card-name {
+  font-size: 13px;
+  font-weight: 700;
+  color: #2d3748;
+}
+.rec-card-value {
+  font-size: 12px;
+  color: #4a5568;
+  font-weight: 600;
+}
+.rec-tag {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+.rec-tag-high {
+  background: #f8d7da;
+  color: #721c24;
+}
+.rec-tag-low {
+  background: #fff3cd;
+  color: #856404;
+}
+.rec-card-body {
+  color: #4a5568;
+}
+.rec-card-body .rec-agent {
+  font-weight: 700;
+  color: #2d3748;
+}
+.rec-card-body .rec-dosage {
+  font-weight: 700;
+  color: #c0392b;
+  background: #fff0e6;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.rec-card-body .rec-note {
+  display: block;
+  margin-top: 4px;
+  font-size: 11px;
+  color: #7f8c8d;
+  border-top: 1px dashed #e0d6c8;
+  padding-top: 4px;
+}
+
+</style>
+</head>
+<body>
+
+<!-- ===== Header ===== -->
+<header class="header">
+  <div class="header-inner">
+    <div class="header-icon">💧</div>
+    <div class="header-text">
+      <h1>泳池水质检测报告</h1>
+      <p>株洲静水环保科技 · 专业检测</p>
+    </div>
+  </div>
+</header>
+
+<!-- ===== Tabs ===== -->
+<nav class="tabs" id="tabs">
+  <div class="tab active" data-tab="input"><span class="tab-icon">📝</span>录入</div>
+  <div class="tab" data-tab="preview"><span class="tab-icon">📊</span>预览</div>
+  <div class="tab" data-tab="history"><span class="tab-icon">📋</span>历史</div>
+  <div class="tab" data-tab="settings"><span class="tab-icon">⚙️</span>设置</div>
+</nav>
+
+<!-- ===== Main Content ===== -->
+<main class="content">
+
+  <!-- Input Panel -->
+  <div class="panel active" id="panel-input">
+
+    <!-- 水体信息（独立区域） -->
+    <div class="section">
+      <div class="section-title">水体信息</div>
+
+      <div class="form-group">
+        <label class="form-label">水体名称 <span class="required">*</span></label>
+        <div style="display:flex;gap:6px;">
+          <input type="text" class="form-input" id="waterName" placeholder="选择或输入水体名称" autocomplete="off" style="flex:1;">
+          <button type="button" class="water-name-dropdown-btn" onclick="toggleWaterNameDropdown()" title="从列表选择">▼</button>
+        </div>
+        <div class="water-name-dropdown" id="waterNameDropdown">
+          <div class="water-name-option" onclick="selectWaterName('湘水湾综合馆成人池')">湘水湾综合馆成人池</div>
+          <div class="water-name-option" onclick="selectWaterName('湘水湾综合馆儿童池')">湘水湾综合馆儿童池</div>
+          <div class="water-name-option" onclick="selectWaterName('湘水湾户外池')">湘水湾户外池</div>
+          <div class="water-name-option" onclick="selectWaterName('湘水湾精品馆成人池')">湘水湾精品馆成人池</div>
+          <div class="water-name-option" onclick="selectWaterName('湘水湾精品馆儿童池')">湘水湾精品馆儿童池</div>
+          <div class="water-name-option" onclick="selectWaterName('天禧荟湘潭馆')">天禧荟湘潭馆</div>
+          <div class="water-name-option" onclick="selectWaterName('天禧荟湘潭馆儿童池')">天禧荟湘潭馆儿童池</div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">水体水量</label>
+        <div class="input-row">
+          <input type="number" class="form-input" id="volume" placeholder="请输入数值" min="0" step="1">
+          <select id="volumeUnit">
+            <option value="吨">吨</option>
+            <option value="m³">m³</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">水体地址</label>
+        <input type="text" class="form-input" id="waterAddress" placeholder="请输入水体地址">
+      </div>
+    </div>
+
+    <!-- 泳池基础信息（可折叠） -->
+    <div class="section">
+      <div class="section-title collapsible" onclick="toggleSection('poolBasicInfo')">
+        泳池基础信息 <span class="collapse-arrow" id="poolBasicInfo-arrow">▼</span>
+      </div>
+      <div id="poolBasicInfo" class="collapsible-content collapsed">
+
+      <div class="form-group">
+        <label class="form-label">水体尺寸</label>
+        <div class="input-row" style="gap:8px;margin-bottom:8px;">
+          <div style="flex:1;">
+            <label style="font-size:12px;color:var(--text-light);margin-bottom:4px;display:block;">长（米）</label>
+            <input type="number" class="form-input" id="poolLength" placeholder="如 25" min="0" step="0.1">
+          </div>
+          <div style="flex:1;">
+            <label style="font-size:12px;color:var(--text-light);margin-bottom:4px;display:block;">宽（米）</label>
+            <input type="number" class="form-input" id="poolWidth" placeholder="如 12.5" min="0" step="0.1">
+          </div>
+        </div>
+        <div class="input-row" style="gap:8px;margin-bottom:8px;">
+          <div style="flex:1;">
+            <label style="font-size:12px;color:var(--text-light);margin-bottom:4px;display:block;">深水区水深（米）</label>
+            <input type="number" class="form-input" id="deepDepth" placeholder="如 1.8" min="0" step="0.1">
+          </div>
+          <div style="flex:1;">
+            <label style="font-size:12px;color:var(--text-light);margin-bottom:4px;display:block;">浅水区水深（米）</label>
+            <input type="number" class="form-input" id="shallowDepth" placeholder="如 1.0" min="0" step="0.1">
+          </div>
+        </div>
+        <div>
+          <label style="font-size:12px;color:var(--text-light);margin-bottom:4px;display:block;">平均水深（米） <span style="color:var(--primary-light);font-weight:normal;">自动计算</span></label>
+          <input type="text" class="form-input" id="avgDepth" placeholder="—" readonly style="background:#edf2f7;color:var(--primary);font-weight:600;">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">循环周期（小时）</label>
+        <input type="text" class="form-input" id="cycle" placeholder="如：4-6" autocomplete="off">
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">水体结构</label>
+        <div class="radio-group" id="rg-structure">
+          <div class="radio-item"><input type="radio" name="structure" id="s1" value="顺流池"><label for="s1">顺流池</label></div>
+          <div class="radio-item"><input type="radio" name="structure" id="s2" value="逆流池"><label for="s2">逆流池</label></div>
+          <div class="radio-item"><input type="radio" name="structure" id="s3" value="混合式"><label for="s3">混合式</label></div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">水体性质</label>
+        <div class="radio-group" id="rg-nature">
+          <div class="radio-item"><input type="radio" name="nature" id="n1" value="室内泳池"><label for="n1">室内泳池</label></div>
+          <div class="radio-item"><input type="radio" name="nature" id="n2" value="室外泳池"><label for="n2">室外泳池</label></div>
+          <div class="radio-item"><input type="radio" name="nature" id="n3" value="室内水上乐园"><label for="n3">室内水上乐园</label></div>
+          <div class="radio-item"><input type="radio" name="nature" id="n4" value="室外水上乐园"><label for="n4">室外水上乐园</label></div>
+          <div class="radio-item"><input type="radio" name="nature" id="n5" value="SPA浴场"><label for="n5">SPA浴场</label></div>
+          <div class="radio-item"><input type="radio" name="nature" id="n6" value="温泉"><label for="n6">温泉</label></div>
+          <div class="radio-item"><input type="radio" name="nature" id="n7" value="水疗按摩池"><label for="n7">水疗按摩池</label></div>
+          <div class="radio-item"><input type="radio" name="nature" id="n8" value="景观水"><label for="n8">景观水</label></div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">水体水源</label>
+        <div class="radio-group" id="rg-source">
+          <div class="radio-item"><input type="radio" name="source" id="w1" value="地下水"><label for="w1">地下水</label></div>
+          <div class="radio-item"><input type="radio" name="source" id="w2" value="市政自来水"><label for="w2">市政自来水</label></div>
+          <div class="radio-item"><input type="radio" name="source" id="w3" value="废热水"><label for="w3">废热水</label></div>
+          <div class="radio-item"><input type="radio" name="source" id="w4" value="其他"><label for="w4">其他</label></div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">循环设备</label>
+        <div class="radio-group" id="rg-cycleDevice">
+          <div class="radio-item"><input type="radio" name="cycleDevice" id="c1" value="重力式过滤器"><label for="c1">重力式过滤器</label></div>
+          <div class="radio-item"><input type="radio" name="cycleDevice" id="c2" value="石英砂过滤器"><label for="c2">石英砂过滤器</label></div>
+          <div class="radio-item"><input type="radio" name="cycleDevice" id="c3" value="纸芯过滤器"><label for="c3">纸芯过滤器</label></div>
+          <div class="radio-item"><input type="radio" name="cycleDevice" id="c4" value="壁挂式一体机"><label for="c4">壁挂式一体机</label></div>
+          <div class="radio-item"><input type="radio" name="cycleDevice" id="c5" value="布袋式过滤器"><label for="c5">布袋式过滤器</label></div>
+          <div class="radio-item"><input type="radio" name="cycleDevice" id="c6" value="无过滤器"><label for="c6">无过滤器</label></div>
+          <div class="radio-item"><input type="radio" name="cycleDevice" id="c7" value="其他"><label for="c7">其他</label></div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">加热设备</label>
+        <div class="radio-group" id="rg-heatingDevice">
+          <div class="radio-item"><input type="radio" name="heatingDevice" id="h1" value="板式换热器"><label for="h1">板式换热器</label></div>
+          <div class="radio-item"><input type="radio" name="heatingDevice" id="h2" value="电加热器"><label for="h2">电加热器</label></div>
+          <div class="radio-item"><input type="radio" name="heatingDevice" id="h3" value="空气能热泵"><label for="h3">空气能热泵</label></div>
+          <div class="radio-item"><input type="radio" name="heatingDevice" id="h4" value="锅炉加热"><label for="h4">锅炉加热</label></div>
+          <div class="radio-item"><input type="radio" name="heatingDevice" id="h5" value="无加热设备"><label for="h5">无加热设备</label></div>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label class="form-label">客流量（人/天）</label>
+        <div class="input-row" style="gap:8px;">
+          <div style="flex:1;">
+            <label style="font-size:12px;color:var(--text-light);margin-bottom:4px;display:block;">周一至周五平均</label>
+            <input type="number" class="form-input" id="weekdayTraffic" placeholder="如 50" min="0" step="1">
+          </div>
+          <div style="flex:1;">
+            <label style="font-size:12px;color:var(--text-light);margin-bottom:4px;display:block;">周六周日及假日平均</label>
+            <input type="number" class="form-input" id="weekendTraffic" placeholder="如 100" min="0" step="1">
+          </div>
+        </div>
+      </div>
+
+      </div><!-- end collapsible-content -->
+    </div>
+
+    <!-- 水质检测数据 -->
+    <div class="section">
+      <div class="section-title">水质检测数据</div>
+      <div class="indicator-list" id="indicatorsContainer">
+        <!-- JS 动态渲染 -->
+      </div>
+    </div>
+
+    <!-- 检测日期 -->
+    <div class="section">
+      <div class="form-group" style="margin-bottom:14px;">
+        <label class="form-label">检测日期</label>
+        <input type="date" class="form-input" id="testDate">
+      </div>
+    </div>
+
+    <!-- 水质维护建议 -->
+    <div class="section">
+      <div class="section-title">💡 水质维护建议</div>
+      <div class="form-group" style="margin-bottom:0;">
+        <textarea class="form-input" id="maintenanceSuggestion" placeholder="请输入水质维护建议，如：结合性余氯偏高，建议加强氯冲击处理..." rows="4" style="resize:vertical;min-height:100px;line-height:1.6;"></textarea>
+      </div>
+    </div>
+
+    <!-- 药剂选用建议 -->
+    <div class="section">
+      <div class="section-title"> 药剂选用建议（可多选）</div>
+      <div class="radio-group" id="rg-chemicals" style="gap:8px;">
+        <!-- JS 动态渲染 -->
+      </div>
+    </div>
+
+    <!-- 操作按钮 -->
+    <div class="section" style="background:transparent;box-shadow:none;padding:4px 0;">
+      <button class="btn btn-primary" onclick="goGenerate()">📊 生成报告</button>
+      <button class="btn btn-danger" onclick="clearAllData()">🗑️ 清除全部数据</button>
+    </div>
+  </div>
+
+  <!-- Preview Panel -->
+  <div class="panel" id="panel-preview">
+    <div class="report-wrapper">
+      <div class="report" id="report">
+        <div class="empty-state">
+          <div class="empty-icon">📋</div>
+          <p>请先在「数据录入」页填写信息<br>然后点击「生成报告」</p>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:12px;">
+      <button class="btn btn-primary" id="btnGenerateImg" onclick="generateImage()">📸 生成图片</button>
+      <button class="btn btn-secondary" onclick="switchTab('input')">← 返回修改数据</button>
+    </div>
+
+    <div class="image-section" id="imageSection" style="display:none;">
+      <img id="generatedImage" alt="报告图片">
+      <div class="image-tip">💡 长按图片可保存到相册</div>
+      <button class="btn btn-success" onclick="downloadImage()">💾 保存图片到本地</button>
+    </div>
+  </div>
+
+  <!-- History Panel -->
+  <div class="panel" id="panel-history">
+    <div class="section">
+      <div class="section-title">📋 历史检测记录</div>
+      <div class="form-group">
+        <label class="form-label">按池名筛选</label>
+        <select class="form-input" id="historyFilter" onchange="renderHistory()">
+          <option value="">全部池子</option>
+        </select>
+      </div>
+      <div id="historyList" style="margin-top:12px;">
+        <div class="empty-state">
+          <div class="empty-icon">📋</div>
+          <p>暂无历史记录<br>检测数据提交后会自动保存到这里</p>
+        </div>
+      </div>
+    </div>
+    <button class="btn btn-success" id="btnExportExcel" onclick="exportToExcel()" style="display:none;">📥 导出 Excel</button>
+    <button class="btn btn-secondary" onclick="loadHistoryRecords()">🔄 刷新记录</button>
+  </div>
+
+  <!-- Settings Panel -->
+  <div class="panel" id="panel-settings">
+    <div class="section">
+      <div class="section-title">☁️ 云端同步设置</div>
+      <p style="font-size:13px;color:var(--text-light);margin-bottom:12px;line-height:1.6;">
+        配置 GitHub Token 后，每次检测数据会自动同步到云端。<br>
+        换手机也能看到历史记录。
+      </p>
+      <div class="form-group">
+        <label class="form-label">GitHub Token</label>
+        <input type="password" class="form-input" id="githubToken" placeholder="粘贴你的 GitHub Token（ghp_...）" autocomplete="off">
+        <p style="font-size:11px;color:var(--text-light);margin-top:6px;">
+          Token 仅保存在本手机，不会发送到其他地方
+        </p>
+      </div>
+      <button class="btn btn-primary" onclick="saveGitHubToken()">💾 保存 Token</button>
+      <button class="btn btn-secondary" onclick="testGitHubConnection()">🔗 测试连接</button>
+      <div id="syncStatus" style="margin-top:12px;font-size:13px;color:var(--text-light);"></div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">📊 同步统计</div>
+      <div id="syncStats" style="font-size:13px;color:var(--text);line-height:2;">
+        加载中…
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">ℹ️ 关于</div>
+      <p style="font-size:12px;color:var(--text-light);line-height:1.8;">
+        泳池水质检测报告生成器 v2.0<br>
+        株洲静水环保科技<br>
+        数据仓库：<a href="https://github.com/jasonyao8116/pool-water-report" style="color:var(--primary-light);" target="_blank">jasonyao8116/pool-water-report</a>
+      </p>
+    </div>
+  </div>
+
+</main>
+
+<!-- Loading Overlay -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="loading-box">
+    <div class="loading-spinner"></div>
+    <div class="loading-text">正在生成图片…</div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============================================================
+ * 折叠/展开 泳池基础信息
+ * ============================================================ */
+function toggleSection(id) {
+  const el = document.getElementById(id);
+  const arrow = document.getElementById(id + '-arrow');
+  if (!el) return;
+  if (el.classList.contains('collapsed')) {
+    el.classList.remove('collapsed');
+    el.classList.add('expanded');
+    if (arrow) arrow.textContent = '▲';
+  } else {
+    el.classList.remove('expanded');
+    el.classList.add('collapsed');
+    if (arrow) arrow.textContent = '▼';
+  }
+}
+
+function toggleReportSection(id) {
+  const el = document.getElementById(id);
+  const arrow = document.getElementById(id + '-arrow');
+  if (!el) return;
+  if (el.classList.contains('collapsed')) {
+    el.classList.remove('collapsed');
+    el.classList.add('expanded');
+    if (arrow) arrow.textContent = '▼';
+  } else {
+    el.classList.remove('expanded');
+    el.classList.add('collapsed');
+    if (arrow) arrow.textContent = '▶';
+  }
+}
+
+// ========== 水体名称下拉选择 ==========
+function toggleWaterNameDropdown() {
+  const dd = document.getElementById('waterNameDropdown');
+  dd.classList.toggle('show');
+}
+function selectWaterName(name) {
+  document.getElementById('waterName').value = name;
+  document.getElementById('waterNameDropdown').classList.remove('show');
+}
+// 点击页面其他地方时关闭下拉
+document.addEventListener('click', function(e) {
+  const dd = document.getElementById('waterNameDropdown');
+  if (!dd) return;
+  const btn = document.querySelector('.water-name-dropdown-btn');
+  if (!dd.contains(e.target) && (!btn || !btn.contains(e.target))) {
+    dd.classList.remove('show');
+  }
+});
+
+/* ============================================================
+ * 指标定义
+ * ============================================================ */
+const INDICATORS = [
+  { key:'ph',                name:'pH',             unit:'',      range:'7.0-7.8',       min:7.0,  max:7.8,  kind:'range', step:'0.1',  placeholder:'如 7.4' },
+  { key:'freeChlorine',      name:'自由余氯',       unit:'mg/L',  range:'0.3-1.0',       min:0.3,  max:1.0,  kind:'range', step:'0.01', placeholder:'如 0.5' },
+  { key:'combinedChlorine',  name:'结合性余氯',     unit:'mg/L',  range:'≤0.4',          min:null, max:0.4,  kind:'max',   step:'0.01', placeholder:'如 0.2' },
+  { key:'cyanuric',          name:'氰尿酸',         unit:'mg/L',  range:'≤50',           min:null, max:50,   kind:'max',   step:'1',    placeholder:'如 30' },
+  { key:'alkalinity',        name:'总碱度',         unit:'mg/L',  range:'80-150',        min:80,   max:150,  kind:'range', step:'1',    placeholder:'如 120' },
+  { key:'hardness',          name:'钙硬度',         unit:'mg/L',  range:'80-200',        min:80,   max:200,  kind:'range', step:'1',    placeholder:'如 150' },
+  { key:'urea',              name:'尿素',           unit:'mg/L',  range:'≤3.5',          min:null, max:3.5,  kind:'max',   step:'0.1',  placeholder:'如 2.0' },
+  { key:'ozone',             name:'臭氧',           unit:'mg/m³', range:'≤0.2',          min:null, max:0.2,  kind:'max',   step:'0.01', placeholder:'如 0.1' },
+  { key:'turbidity',         name:'浑浊度',         unit:'NTU',   range:'≤1',            min:null, max:1,    kind:'max',   step:'0.1',  placeholder:'如 0.5' },
+  { key:'temperature',       name:'水温',           unit:'℃',    range:'23-30',         min:23,   max:30,   kind:'range', step:'0.1',  placeholder:'如 26' },
+  { key:'si',                name:'平衡指数 SI',    unit:'',      range:'-0.3~+0.3',     min:-0.3, max:0.3,  kind:'calculated', step:'0.01',  placeholder:'自动计算' },
+];
+
+/* ============================================================
+ * SI 自动计算 - 查表数据与插值函数
+ * ============================================================ */
+const SI_TABLES = {
+  Tf: [
+    {x:0, y:0.0}, {x:3.9, y:0.1}, {x:7.8, y:0.2}, {x:11.7, y:0.3},
+    {x:15.6, y:0.4}, {x:20, y:0.5}, {x:24.4, y:0.6}, {x:28.9, y:0.7},
+    {x:34.4, y:0.8}, {x:43.3, y:0.9}, {x:53.3, y:1.0}
+  ],
+  CHf: [
+    {x:5, y:0.3}, {x:25, y:1.0}, {x:50, y:1.3}, {x:75, y:1.5},
+    {x:100, y:1.6}, {x:150, y:1.8}, {x:200, y:1.9}, {x:300, y:2.1},
+    {x:400, y:2.2}, {x:800, y:2.5}, {x:1000, y:2.6}
+  ],
+  ALKf: [
+    {x:5, y:0.7}, {x:25, y:1.4}, {x:50, y:1.7}, {x:75, y:1.9},
+    {x:100, y:2.0}, {x:150, y:2.2}, {x:200, y:2.3}, {x:300, y:2.5},
+    {x:400, y:2.6}, {x:800, y:2.9}, {x:1000, y:3.0}
+  ]
+};
+
+// 线性插值函数：根据 value 在 table 中查找对应的 y 值
+function interpolate(value, table) {
+  if (table.length === 0) return null;
+  // 小于最小值 → 返回最小值对应的 y
+  if (value <= table[0].x) return table[0].y;
+  // 大于最大值 → 返回最大值对应的 y
+  if (value >= table[table.length - 1].x) return table[table.length - 1].y;
+  // 在相邻两点之间线性插值
+  for (let i = 0; i < table.length - 1; i++) {
+    if (value >= table[i].x && value <= table[i + 1].x) {
+      const ratio = (value - table[i].x) / (table[i + 1].x - table[i].x);
+      return table[i].y + ratio * (table[i + 1].y - table[i].y);
+    }
+  }
+  return table[table.length - 1].y;
+}
+
+// 计算 SI 值
+function calculateSI() {
+  const phEl = document.getElementById('ind_ph');
+  const tempEl = document.getElementById('ind_temperature');
+  const hardEl = document.getElementById('ind_hardness');
+  const alkEl = document.getElementById('ind_alkalinity');
+  const siEl = document.getElementById('ind_si');
+
+  const ph = parseFloat(phEl.value);
+  const temp = parseFloat(tempEl.value);
+  const hard = parseFloat(hardEl.value);
+  const alk = parseFloat(alkEl.value);
+
+  // 如果任一必要值缺失或为0，SI 无法计算
+  if (isNaN(ph) || isNaN(temp) || isNaN(hard) || isNaN(alk) || ph === 0 || temp === 0 || hard === 0 || alk === 0) {
+    siEl.value = '';
+    siEl.placeholder = '需填写pH/水温/钙硬度/总碱度';
+    return null;
+  }
+
+  const Tf = interpolate(temp, SI_TABLES.Tf);
+  const CHf = interpolate(hard, SI_TABLES.CHf);
+  const ALKf = interpolate(alk, SI_TABLES.ALKf);
+
+  const si = ph + Tf + CHf + ALKf - 12.1;
+  siEl.value = si.toFixed(2);
+  siEl.placeholder = '';
+  return si;
+}
+
+/* ============================================================
+ * 药剂选项定义
+ * ============================================================ */
+const CHEMICALS = [
+  '万消灵TCCA5型速溶消毒片','万消灵TCCA9型缓释消毒颗粒','万消灵TCCA9型缓释消毒颗粉',
+  'PH升高剂（碱性盐类）','PH降低剂（酸性盐类）','常规型PH升高剂（片碱）','食品级小苏打',
+  '蓝清透（酵素澄清剂）','聚合氯化铝沉淀剂',
+  '泳蓝净（除藻剂）',
+  '澄爽宝（臭氧粉）','泳之水（超氯水质活化剂）',
+  '泳泉霸（尿速降）'
+];
+
+/* ============================================================
+ * 初始化：渲染指标输入区
+ * ============================================================ */
+function renderIndicators() {
+  const container = document.getElementById('indicatorsContainer');
+  container.innerHTML = INDICATORS.map(ind => {
+    if (ind.kind === 'calculated') {
+      // 自动计算字段：只读显示
+      return `<div class="indicator-row" id="irow_${ind.key}">
+        <div class="ind-name">${ind.name}</div>
+        <input class="ind-input ind-calculated" type="text" id="ind_${ind.key}"
+               readonly placeholder="自动计算" data-key="${ind.key}">
+        <div class="ind-unit">${ind.unit}</div>
+        <div class="ind-range">${ind.range}</div>
+        <div class="ind-badge" id="badge_${ind.key}">—</div>
+      </div>`;
+    }
+    return `<div class="indicator-row" id="irow_${ind.key}">
+      <div class="ind-name">${ind.name}</div>
+      <input class="ind-input" type="number" id="ind_${ind.key}"
+             step="${ind.step}" placeholder="${ind.placeholder}"
+             inputmode="decimal" data-key="${ind.key}">
+      <div class="ind-unit">${ind.unit}</div>
+      <div class="ind-range">${ind.range}</div>
+      <div class="ind-badge" id="badge_${ind.key}">—</div>
+    </div>`;
+  }).join('');
+
+  // 绑定输入事件
+  container.querySelectorAll('.ind-input:not(.ind-calculated)').forEach(input => {
+    input.addEventListener('input', function() {
+      const key = this.dataset.key;
+      updateBadge(key);
+      // 当影响 SI 的字段变化时，重新计算 SI
+      if (['ph', 'temperature', 'hardness', 'alkalinity'].includes(key)) {
+        calculateSI();
+        updateBadge('si');
+      }
+      saveData();
+    });
+  });
+}
+
+/* ============================================================
+ * 渲染药剂多选
+ * ============================================================ */
+function renderChemicals() {
+  const container = document.getElementById('rg-chemicals');
+  container.innerHTML = CHEMICALS.map((c, i) => `
+    <div class="radio-item">
+      <input type="checkbox" name="chemical" id="chem_${i}" value="${c}">
+      <label for="chem_${i}">${c}</label>
+    </div>
+  `).join('');
+
+  // 多选样式：已选时保持蓝色
+  container.querySelectorAll('input[type=checkbox]').forEach(cb => {
+    cb.addEventListener('change', function() {
+      const label = this.nextElementSibling;
+      if (this.checked) {
+        label.style.background = 'linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%)';
+        label.style.color = 'white';
+        label.style.borderColor = 'var(--primary-light)';
+        label.style.boxShadow = '0 2px 6px rgba(46,134,193,0.25)';
+      } else {
+        label.style.background = '#fafbfc';
+        label.style.color = '#5a6a7a';
+        label.style.borderColor = 'var(--border)';
+        label.style.boxShadow = 'none';
+      }
+      saveData();
+    });
+  });
+}
+
+/* ============================================================
+ * 平均水深自动计算
+ * ============================================================ */
+function calcAvgDepth() {
+  const deep = parseFloat(document.getElementById('deepDepth').value);
+  const shallow = parseFloat(document.getElementById('shallowDepth').value);
+  const avgField = document.getElementById('avgDepth');
+  if (!isNaN(deep) && !isNaN(shallow) && deep > 0 && shallow > 0) {
+    avgField.value = ((deep + shallow) / 2).toFixed(2);
+  } else {
+    avgField.value = '';
+  }
+}
+
+document.getElementById('deepDepth').addEventListener('input', function() { calcAvgDepth(); saveData(); });
+document.getElementById('shallowDepth').addEventListener('input', function() { calcAvgDepth(); saveData(); });
+document.getElementById('poolLength').addEventListener('input', saveData);
+document.getElementById('poolWidth').addEventListener('input', saveData);
+
+/* ============================================================
+ * 评价逻辑
+ * ============================================================ */
+function evaluate(ind, rawValue) {
+  if (rawValue === '' || rawValue === null || rawValue === undefined) return 'none';
+  const v = parseFloat(rawValue);
+  if (isNaN(v)) return 'none';
+  if (ind.kind === 'range' || ind.kind === 'calculated') {
+    if (v < ind.min) return 'low';
+    if (v > ind.max) return 'high';
+    return 'normal';
+  } else { // kind === 'max'：只有上限
+    if (v > ind.max) return 'high';
+    return 'normal';
+  }
+}
+
+const STATUS_TEXT  = { normal:'✓正常', high:'↑偏高', low:'↓偏低', none:'未检测' };
+const STATUS_CLASS = { normal:'normal', high:'high', low:'low', none:'' };
+
+function updateBadge(key) {
+  const ind = INDICATORS.find(i => i.key === key);
+  const input = document.getElementById('ind_' + key);
+  const badge = document.getElementById('badge_' + key);
+  const row = document.getElementById('irow_' + key);
+  const status = evaluate(ind, input.value);
+  badge.textContent = STATUS_TEXT[status];
+  badge.className = 'ind-badge ' + STATUS_CLASS[status];
+  row.className = 'indicator-row' + (status === 'normal' ? ' status-normal' : status === 'high' ? ' status-high' : status === 'low' ? ' status-low' : '');
+}
+
+function updateAllBadges() {
+  INDICATORS.forEach(ind => updateBadge(ind.key));
+}
+
+/* ============================================================
+ * 表单数据收集
+ * ============================================================ */
+function getFormData() {
+  const data = {
+    waterName: document.getElementById('waterName').value.trim(),
+    volume: document.getElementById('volume').value,
+    volumeUnit: document.getElementById('volumeUnit').value,
+    waterAddress: document.getElementById('waterAddress').value.trim(),
+    poolLength: document.getElementById('poolLength').value,
+    poolWidth: document.getElementById('poolWidth').value,
+    deepDepth: document.getElementById('deepDepth').value,
+    shallowDepth: document.getElementById('shallowDepth').value,
+    avgDepth: document.getElementById('avgDepth').value,
+    cycle: document.getElementById('cycle').value.trim(),
+    structure: getRadio('structure'),
+    nature: getRadio('nature'),
+    source: getRadio('source'),
+    cycleDevice: getRadio('cycleDevice'),
+    heatingDevice: getRadio('heatingDevice'),
+    weekdayTraffic: document.getElementById('weekdayTraffic').value,
+    weekendTraffic: document.getElementById('weekendTraffic').value,
+    testDate: document.getElementById('testDate').value,
+    maintenanceSuggestion: document.getElementById('maintenanceSuggestion').value.trim(),
+    indicators: {}
+  };
+  INDICATORS.forEach(ind => {
+    data.indicators[ind.key] = document.getElementById('ind_' + ind.key).value;
+  });
+  // 药剂多选
+  data.chemicals = [];
+  document.querySelectorAll('input[name="chemical"]:checked').forEach(cb => {
+    data.chemicals.push(cb.value);
+  });
+  return data;
+}
+
+function getRadio(name) {
+  const el = document.querySelector(`input[name="${name}"]:checked`);
+  return el ? el.value : '';
+}
+
+function setRadio(name, value) {
+  if (!value) return;
+  const el = document.querySelector(`input[name="${name}"][value="${value}"]`);
+  if (el) el.checked = true;
+}
+
+
+/* ============================================================
+ * 自动生成水质调节建议
+ * ============================================================ */
+function generateRecommendations(data, volume) {
+  const indicators = data.indicators;
+  const hasVolume = volume > 0;
+  const steps = [];
+  const warnings = [];
+  const abnormalList = [];
+
+  function fmt(v) {
+    if (v >= 100) return Math.round(v).toFixed(0);
+    if (v >= 10) return v.toFixed(1);
+    if (v >= 1) return v.toFixed(2);
+    return v.toFixed(3);
+  }
+
+  function gv(key) {
+    const v = parseFloat(indicators[key]);
+    return isNaN(v) ? null : v;
+  }
+
+  function isAbn(key) {
+    const ind = INDICATORS.find(i => i.key === key);
+    if (!ind) return null;
+    const val = indicators[key];
+    if (val === '' || val === null || val === undefined) return null;
+    const v = parseFloat(val);
+    if (isNaN(v)) return null;
+    const s = evaluate(ind, val);
+    if (s === 'normal' || s === 'none') return null;
+    return { status: s, value: v };
+  }
+
+  // 收集所有异常项
+  INDICATORS.forEach(ind => {
+    const r = isAbn(ind.key);
+    if (r) abnormalList.push({ key: ind.key, name: ind.name, ...r });
+  });
+
+  if (abnormalList.length === 0) return null;
+
+  const pH = gv('ph'), alk = gv('alkalinity'), hard = gv('hardness');
+  const fc = gv('freeChlorine'), cc = gv('combinedChlorine');
+  const cyan = gv('cyanuric'), urea = gv('urea'), turb = gv('turbidity');
+  const ozone = gv('ozone');
+
+  const pHlow = pH !== null && pH < 7.0;
+  const pHhigh = pH !== null && pH > 7.8;
+  const alkLow = alk !== null && alk < 80;
+  const alkHigh = alk !== null && alk > 150;
+  const hardLow = hard !== null && hard < 80;
+  const hardHigh = hard !== null && hard > 200;
+  const fcLow = fc !== null && fc < 0.3;
+  const fcHigh = fc !== null && fc > 1.0;
+  const ccHigh = cc !== null && cc > 0.4;
+  const cyanHigh = cyan !== null && cyan > 50;
+  const ureaHigh = urea !== null && urea > 3.5;
+  const turbHigh = turb !== null && turb > 1;
+  const ozoneHigh = ozone !== null && ozone > 0.2;
+
+  // ===== 处理步骤（按正确顺序排列） =====
+
+  // Step 1: pH调节（最先，因为pH影响所有后续处理效果）
+  if (pHlow && alkLow) {
+    const delta = 7.4 - pH;
+    const dosage = volume * 5 * delta;
+    steps.push({
+      action: '调节pH和总碱度',
+      product: 'PH升高剂（碱性盐类）',
+      dosage: hasVolume ? `投加 ${fmt(dosage)} g（约5g/吨水提升pH 1ppm）` : '需先确定泳池容积',
+      note: 'pH和总碱度同时偏低，用此药可同时提升两者。溶解后均匀抛洒至水中。'
+    });
+  } else if (pHlow) {
+    const delta = 7.4 - pH;
+    const dosage = volume * 10 * delta;
+    steps.push({
+      action: '调节pH',
+      product: '常规型PH升高剂（片碱/氢氧化钠）',
+      dosage: hasVolume ? `投加 ${fmt(dosage)} g（10g/吨水提升pH 1ppm）` : '需先确定泳池容积',
+      note: '属强碱，溶解时产生高温注意安全。局部强碱易造成药剂结块、氯失效、诱发结垢，需充分溶解后泼洒。'
+    });
+  } else if (pHhigh) {
+    const delta = pH - 7.4;
+    const dosage = volume * 15 * delta * 2;
+    steps.push({
+      action: '调节pH',
+      product: 'PH降低剂（酸性盐类）',
+      dosage: hasVolume ? `投加 ${fmt(dosage)} g（15g/吨水降低pH 0.5ppm）` : '需先确定泳池容积',
+      note: '溶解后均匀抛洒至水中。'
+    });
+  }
+
+  // Step 2: 总碱度单独调节（仅当pH正常但碱度异常时）
+  if (!pHlow && !pHhigh && alkLow) {
+    const delta = 100 - alk;
+    const dosage = volume * 18 * (delta / 10);
+    steps.push({
+      action: '提升总碱度',
+      product: '食品级小苏打（碳酸氢钠）',
+      dosage: hasVolume ? `投加 ${fmt(dosage)} g（18g/吨水提升10ppm总碱度）` : '需先确定泳池容积',
+      note: '只提升总碱度，对pH影响极微弱。溶解后均匀抛洒。'
+    });
+  }
+  if (!pHlow && !pHhigh && alkHigh) {
+    const delta = alk - 120;
+    const dosage = volume * 30 * (delta / 0.5);
+    steps.push({
+      action: '降低总碱度',
+      product: 'PH降低剂（酸性盐类）',
+      dosage: hasVolume ? `投加 ${fmt(dosage)} g（15g/吨水降低pH 0.5ppm，同步降低总碱度）` : '需先确定泳池容积',
+      note: '通过降pH同步降总碱度，需关注pH变化避免过低。'
+    });
+  }
+
+  // Step 3: 钙硬度调节
+  if (hardLow) {
+    const delta = 150 - hard;
+    const dosage = volume * 2.5 * (delta / 10);
+    steps.push({
+      action: '提升钙硬度',
+      product: '氯化钙',
+      dosage: hasVolume ? `投加 ${fmt(dosage)} g（约2.5g/吨水提升钙硬度10mg/L）` : '需先确定泳池容积',
+      note: '先用桶溶解后均匀泼洒。分批投加，每次间隔至少4小时。'
+    });
+  }
+  if (hardHigh) {
+    const excess = hard - 200;
+    const pct = ((excess / hard) * 100).toFixed(0);
+    steps.push({
+      action: '降低钙硬度',
+      product: '部分换水稀释',
+      dosage: hasVolume ? `换水约 ${pct}%（约 ${fmt(volume * excess / hard)} ${data.volumeUnit || '吨'}）` : '建议部分换水',
+      note: '换水稀释至标准范围内。含金属离子水体中投放含氯药剂易导致水体变色。'
+    });
+  }
+
+  // Step 4: 消毒处理
+  if (fcLow) {
+    const delta = 0.5 - fc;
+    const dosage = volume * 2 * delta;
+    steps.push({
+      action: '补充余氯',
+      product: '万消灵TCCA5型速溶消毒片（有效氯50%）',
+      dosage: hasVolume ? `投加 ${fmt(Math.max(dosage, 0))} g（2g/吨水提升1ppm余氯）` : '需先确定泳池容积',
+      note: '速溶快速释放氯，适用于营业中快速补氯。'
+    });
+  }
+  if (fcHigh) {
+    steps.push({
+      action: '降低余氯',
+      product: '—（无专用药剂）',
+      dosage: '停止投加含氯消毒剂，加强循环过滤',
+      note: '待余氯自然衰减至正常范围后重新检测。'
+    });
+  }
+
+  // Step 5: 结合性余氯/氧化处理
+  if (ccHigh) {
+    const clDose = volume * 17.5;
+    const swDose = volume <= 500 ? volume * 10 : volume * 5;
+    steps.push({
+      action: '分解结合性余氯、提升ORP',
+      product: '澄爽宝（臭氧粉）+ 泳之水（超氯水质活化剂）',
+      dosage: hasVolume
+        ? `① 澄爽宝 ${fmt(clDose)} g（15-20g/吨水）\n② 泳之水 ${fmt(swDose)} ml（${volume <= 500 ? '10ml/吨水' : '5ml/吨水'}）`
+        : '需先确定泳池容积',
+      note: '池水有机物累积导致结合性余氯超标、ORP偏低并产生异味。澄爽宝分解油脂和生物膜，泳之水增强氯消毒效果。'
+    });
+  }
+
+  // Step 6: 氰尿酸处理
+  if (cyanHigh) {
+    const excess = cyan - 50;
+    const pct = ((excess / cyan) * 100).toFixed(0);
+    steps.push({
+      action: '降低氰尿酸',
+      product: '部分换水稀释',
+      dosage: hasVolume ? `换水约 ${pct}%（约 ${fmt(volume * excess / cyan)} ${data.volumeUnit || '吨'}）` : `换水约${pct}%`,
+      note: '万消灵TCCA系列产品含氰尿酸，后续需控制用量。'
+    });
+  }
+
+  // Step 7: 尿素处理
+  if (ureaHigh) {
+    const ureaDose = hasVolume ? fmt(urea * volume * 6) : '—';
+    steps.push({
+      action: '降低尿素',
+      product: '泳泉霸（尿速降）+ 消毒剂',
+      dosage: hasVolume
+        ? `① 泳泉霸 ${fmt(volume * 5)} ml（5ml/吨水），按1:20稀释\n② 配套消毒剂 ${ureaDose} g（尿素值×池水量×6g）`
+        : '需先确定泳池容积和尿素值',
+      note: '除尿素须搭配消毒剂。有效期约15天，前7天效果更佳。'
+    });
+  }
+
+  // Step 8: 臭氧调整
+  if (ozoneHigh) {
+    steps.push({
+      action: '降低臭氧',
+      product: '—（减少设备投加量）',
+      dosage: '减少臭氧设备投加量或缩短运行时间',
+      note: '加强通风，臭氧半衰期约20-30分钟。'
+    });
+  }
+
+  // Step 9: 水质澄清
+  if (turbHigh) {
+    steps.push({
+      action: '水质澄清',
+      product: hasVolume
+        ? '蓝清透（酵素澄清剂）/ 聚合氯化铝沉淀剂'
+        : '蓝清透/聚合氯化铝',
+      dosage: hasVolume
+        ? `有循环：蓝清透浑浊处理 ${fmt(volume * 0.95)} ml（475ml/500吨水），按1:100稀释，循环2个周期\n无循环：聚合氯化铝 ${fmt(volume * 7.5)} g（取中值7.5g/吨水），按1:3稀释，投加后保持静止，户外池日出前完成吸污`
+        : '需先确定泳池容积',
+      note: '蓝清透适用于有循环过滤系统。聚合氯化铝投加前须保证pH 7.8-8.0、余氯1ppm。'
+    });
+  }
+
+  // Step 10: 水温调节
+  const temp = gv('temperature');
+  if (temp !== null && temp < 23) {
+    steps.push({
+      action: '提升水温',
+      product: '—（启用加热系统）',
+      dosage: '启用加热系统升温至23-30℃',
+      note: '检查加热设备是否正常。'
+    });
+  } else if (temp !== null && temp > 30) {
+    steps.push({
+      action: '降低水温',
+      product: '—（启用遮阳/冷却系统）',
+      dosage: '启用遮阳设施或冷却系统',
+      note: '降温至23-30℃范围。'
+    });
+  }
+
+  // ===== 注意事项（基于药剂交互规则）=====
+  if (fcLow && steps.length > 1) {
+    warnings.push('含氯消毒剂与除藻剂（泳蓝净）须间隔30分钟投放。');
+  }
+  if (ccHigh && fcLow) {
+    warnings.push('结合性余氯超标时，建议先投加澄爽宝+泳之水分解有机物，再补充余氯。');
+  }
+  if (steps.some(s => s.product && s.product.includes('PH升高剂'))) {
+    warnings.push('PH升高剂（片碱）属强碱，溶解时产生高温，需做好防护。');
+  }
+  if (pHlow && steps.some(s => s.product && s.product.includes('速溶消毒片'))) {
+    warnings.push('建议先调pH至正常范围再补氯，低pH会降低消毒效率。');
+  }
+  if (turbHigh && (fcLow || fcHigh)) {
+    warnings.push('浑浊时消毒效果会受影响，建议先澄清再消毒，或同步进行。');
+  }
+  if (steps.some(s => s.product && s.product.includes('换水'))) {
+    warnings.push('换水后需重新检测各项指标。');
+  }
+  if (steps.length >= 3) {
+    warnings.push('多项指标异常时建议分步处理，每步完成后间隔2-4小时再检测，避免药剂相互干扰。');
+  }
+
+  // ===== 生成HTML =====
+  const abnormalTags = abnormalList.map(a => {
+    const label = a.status === 'high' ? '↑' : '↓';
+    const cls = a.status === 'high' ? 'rec-tag-high' : 'rec-tag-low';
+    return `<span class="rec-tag ${cls}" style="font-size:11px;padding:1px 6px;">${a.name}${label}</span>`;
+  }).join(' ');
+
+  const stepsHTML = steps.map((s, i) => `
+    <div style="margin-bottom:10px;padding:8px 10px;background:#f8fafb;border-radius:6px;border-left:3px solid ${s.product.includes('—') ? '#95a5a6' : '#2e86c1'};">
+      <div style="font-weight:700;color:#1a5276;margin-bottom:3px;">第${i + 1}步：${s.action}</div>
+      <div style="color:#4a5568;font-size:12px;">
+        <div>🧪 <b>${s.product}</b></div>
+        <div>📏 <span style="color:#c0392b;font-weight:600;">${s.dosage.replace(/\n/g, '<br>')}</span></div>
+        ${s.note ? `<div style="color:#7f8c8d;font-size:11px;margin-top:2px;">💡 ${s.note}</div>` : ''}
+      </div>
+    </div>
+  `).join('');
+
+  const warningsHTML = warnings.length > 0 ? `
+    <div style="margin-top:10px;padding:8px 10px;background:#fff8e1;border-radius:6px;border-left:3px solid #f0ad4e;">
+      <div style="font-weight:700;color:#856404;font-size:12px;margin-bottom:4px;">⚠️ 注意事项</div>
+      <div style="font-size:11px;color:#856404;line-height:1.7;">
+        ${warnings.map(w => `• ${w}`).join('<br>')}
+      </div>
+    </div>
+  ` : '';
+
+  return `
+    <div class="report-section">
+      <div class="report-section-title report-collapsible" onclick="toggleReportSection('reportRecs')">💡 水质处理方案 <span class="report-collapse-arrow" id="reportRecs-arrow">▶</span></div>
+      <div id="reportRecs" class="report-collapsible-content expanded">
+        <div style="margin-bottom:8px;padding:8px 10px;background:#eef6fb;border-radius:6px;font-size:12px;color:#2c3e50;">
+          <div style="font-weight:700;margin-bottom:4px;">异常指标（共${abnormalList.length}项）</div>
+          <div>${abnormalTags}</div>
+        </div>
+        <div style="font-weight:600;font-size:13px;color:#1a5276;margin:10px 0 6px;">📋 处理方案</div>
+        ${stepsHTML}
+        ${warningsHTML}
+      </div>
+    </div>`;
+}
+
+function buildRecommendationHTML(htmlOrRecs) {
+  if (htmlOrRecs === null) {
+    return `
+    <div class="report-section">
+      <div class="report-section-title">💡 水质处理方案</div>
+      <div class="rec-all-ok">✅ 所有检测项目均在正常范围内，无需调节</div>
+    </div>`;
+  }
+  if (typeof htmlOrRecs === 'string') return htmlOrRecs;
+  return '';
+}
+
+/* ============================================================
+ * 生成报告 HTML
+ * ============================================================ */
+function buildReportHTML() {
+  const d = getFormData();
+  const waterName = d.waterName || '—';
+  const volumeStr = d.volume ? (d.volume + ' ' + d.volumeUnit) : '—';
+  const waterAddress = d.waterAddress || '—';
+  const poolLength = d.poolLength || '—';
+  const poolWidth = d.poolWidth || '—';
+  const deepDepth = d.deepDepth || '—';
+  const shallowDepth = d.shallowDepth || '—';
+  const avgDepth = d.avgDepth || '—';
+  const sizeStr = (poolLength !== '—' || poolWidth !== '—')
+    ? (poolLength !== '—' ? poolLength + 'm' : '—') + ' × ' + (poolWidth !== '—' ? poolWidth + 'm' : '—')
+    : '—';
+  const cycle = d.cycle || '—';
+  const structure = d.structure || '—';
+  const nature = d.nature || '—';
+  const source = d.source || '—';
+  const cycleDevice = d.cycleDevice || '—';
+  const heatingDevice = d.heatingDevice || '—';
+  const weekdayTraffic = d.weekdayTraffic ? (d.weekdayTraffic + ' 人/天') : '—';
+  const weekendTraffic = d.weekendTraffic ? (d.weekendTraffic + ' 人/天') : '—';
+  const testDate = d.testDate || '—';
+  const maintSuggestion = d.maintenanceSuggestion || '';
+  const chemicals = (d.chemicals && d.chemicals.length) ? d.chemicals.join('、') : '';
+
+  // 统计
+  let countNormal = 0, countHigh = 0, countLow = 0, countNone = 0;
+  const rows = INDICATORS.map((ind, idx) => {
+    const value = d.indicators[ind.key];
+    const status = evaluate(ind, value);
+    if (status === 'normal') countNormal++;
+    else if (status === 'high') countHigh++;
+    else if (status === 'low') countLow++;
+    else countNone++;
+    const isAbnormal = (status === 'high' || status === 'low');
+    const unitStr = ind.unit ? `（${ind.unit}）` : '';
+    return `<tr class="${isAbnormal ? 'row-abnormal' : ''}">
+      <td>${idx + 1}</td>
+      <td class="col-name">${ind.name}${unitStr}</td>
+      <td>${ind.range}</td>
+      <td>${value !== '' ? value : '—'}</td>
+      <td><span class="rbadge rbadge-${status}">${STATUS_TEXT[status]}</span></td>
+    </tr>`;
+  }).join('');
+
+  const total = INDICATORS.length;
+
+  // 生成调节建议
+  const poolVolume = parseFloat(d.volume) || 0;
+  const recs = generateRecommendations(d, poolVolume);
+  const recHTML = buildRecommendationHTML(recs);
+
+  return `
+    <div class="report-head">
+      <div class="report-company">株洲静水环保科技</div>
+      <div class="report-title">水 质 检 测 报 告</div>
+      <div class="report-subtitle">Water Quality Testing Report</div>
+    </div>
+
+    <div class="report-section">
+      <div class="report-section-title">水体信息</div>
+      <table class="info-table">
+        <tr><td class="lbl">水体名称</td><td class="val">${waterName}</td>
+            <td class="lbl">水体地址</td><td class="val">${waterAddress}</td></tr>
+        <tr><td class="lbl">水体水量</td><td class="val">${volumeStr}</td>
+            <td class="lbl"></td><td class="val"></td></tr>
+      </table>
+    </div>
+
+    <div class="report-section">
+      <div class="report-section-title report-collapsible" onclick="toggleReportSection('reportPoolInfo')">泳池基础信息 <span class="report-collapse-arrow" id="reportPoolInfo-arrow">▶</span></div>
+      <div id="reportPoolInfo" class="report-collapsible-content collapsed">
+      <table class="info-table">
+        <tr><td class="lbl">水体尺寸</td><td class="val">${sizeStr}</td>
+            <td class="lbl">平均水深</td><td class="val">${avgDepth !== '—' ? avgDepth + ' m' : '—'}</td></tr>
+        <tr><td class="lbl">深水区水深</td><td class="val">${deepDepth !== '—' ? deepDepth + ' m' : '—'}</td>
+            <td class="lbl">浅水区水深</td><td class="val">${shallowDepth !== '—' ? shallowDepth + ' m' : '—'}</td></tr>
+        <tr><td class="lbl">循环周期</td><td class="val">${cycle}${cycle !== '—' ? ' 小时' : ''}</td>
+            <td class="lbl">水体结构</td><td class="val">${structure}</td></tr>
+        <tr><td class="lbl">水体性质</td><td class="val">${nature}</td>
+            <td class="lbl">水体水源</td><td class="val">${source}</td></tr>
+        <tr><td class="lbl">循环设备</td><td class="val">${cycleDevice}</td>
+            <td class="lbl">加热设备</td><td class="val">${heatingDevice}</td></tr>
+        <tr><td class="lbl">客流量(工作日)</td><td class="val">${weekdayTraffic}</td>
+            <td class="lbl">客流量(节假日)</td><td class="val">${weekendTraffic}</td></tr>
+      </table>
+      </div>
+    </div>
+
+    <div class="report-section">
+      <div class="report-section-title">水质检测数据</div>
+      <div class="report-summary">
+        <div class="summary-item summary-total"><span class="summary-num">${total}</span>总指标</div>
+        <div class="summary-item summary-normal"><span class="summary-num">${countNormal}</span>正常</div>
+        <div class="summary-item summary-high"><span class="summary-num">${countHigh}</span>偏高</div>
+        <div class="summary-item summary-low"><span class="summary-num">${countLow}</span>偏低</div>
+      </div>
+      <table class="data-table">
+        <thead>
+          <tr>
+            <th style="width:30px;">序号</th>
+            <th>检测指标</th>
+            <th style="width:68px;">建议范围</th>
+            <th style="width:52px;">测试值</th>
+            <th style="width:60px;">评价</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>
+
+${recHTML}
+
+${maintSuggestion ? `
+    <div class="report-section">
+      <div class="report-section-title">💡 水质维护建议</div>
+      <div style="padding:10px 12px;background:#fefcf3;border-radius:8px;border-left:4px solid #f39c12;font-size:12.5px;line-height:1.8;color:#7d6608;white-space:pre-wrap;">${maintSuggestion}</div>
+    </div>` : ''}
+${chemicals ? `
+    <div class="report-section">
+      <div class="report-section-title">🧪 药剂选用建议</div>
+      <div style="padding:10px 12px;background:#eaf4fb;border-radius:8px;border-left:4px solid var(--primary-light);font-size:12.5px;line-height:1.8;color:var(--primary);">
+        ${chemicals}
+      </div>
+    </div>` : ''}
+
+    <div class="report-foot">
+      <div class="report-foot-col">
+        <span>检测日期：${testDate}</span>
+        <span>检测人员：__________</span>
+      </div>
+      <div class="report-foot-col" style="text-align:right;">
+        <span class="company-stamp">株洲静水环保科技</span>
+        <span>专业 · 可靠 · 放心</span>
+      </div>
+    </div>
+  `;
+}
+
+/* ============================================================
+ * Tab 切换
+ * ============================================================ */
+function switchTab(tabName) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+  document.querySelector(`.tab[data-tab="${tabName}"]`).classList.add('active');
+  document.getElementById('panel-' + tabName).classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', function() {
+    const target = this.dataset.tab;
+    if (target === 'preview') {
+      // 切换到预览时自动生成报告
+      document.getElementById('report').innerHTML = buildReportHTML();
+      // 隐藏之前的图片结果
+      document.getElementById('imageSection').style.display = 'none';
+    }
+    switchTab(target);
+  });
+});
+
+/* ============================================================
+ * "生成报告"按钮 → 切到预览
+ * ============================================================ */
+function goGenerate() {
+  document.getElementById('report').innerHTML = buildReportHTML();
+  document.getElementById('imageSection').style.display = 'none';
+  switchTab('preview');
+}
+
+/* ============================================================
+ * 图片生成（html2canvas）
+ * ============================================================ */
+async function generateImage() {
+  if (typeof html2canvas === 'undefined') {
+    showToast('⚠️ html2canvas 库未加载，请检查网络');
+    return;
+  }
+  const report = document.getElementById('report');
+  if (!report.querySelector('.report-head')) {
+    showToast('⚠️ 请先生成报告');
+    return;
+  }
+  const overlay = document.getElementById('loadingOverlay');
+  overlay.classList.add('show');
+
+  try {
+    // 等一帧确保渲染完成
+    await new Promise(r => setTimeout(r, 100));
+    const canvas = await html2canvas(report, {
+      scale: Math.min(window.devicePixelRatio * 2, 4),
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      logging: false,
+      allowTaint: true,
+    });
+    const imgData = canvas.toDataURL('image/png');
+    const img = document.getElementById('generatedImage');
+    img.src = imgData;
+    document.getElementById('imageSection').style.display = 'block';
+    // 滚动到图片区
+    setTimeout(() => {
+      document.getElementById('imageSection').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 200);
+    showToast('✅ 图片生成成功');
+  } catch (err) {
+    console.error(err);
+    showToast('❌ 生成失败：' + (err.message || '未知错误'));
+  } finally {
+    overlay.classList.remove('show');
+  }
+}
+
+/* ============================================================
+ * 图片下载
+ * ============================================================ */
+function downloadImage() {
+  const img = document.getElementById('generatedImage');
+  if (!img.src) { showToast('⚠️ 请先生成图片'); return; }
+  const d = getFormData();
+  const dateStr = d.testDate || new Date().toISOString().slice(0,10);
+  const nameStr = (d.waterName || '报告').replace(/[^\w\u4e00-\u9fa5]/g, '_');
+  const fileName = `水质检测报告_${nameStr}_${dateStr}.png`;
+
+  // 判断是否在 iOS
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  if (isIOS) {
+    // iOS：打开新窗口显示图片，提示用户长按保存
+    const win = window.open('', '_blank');
+    if (win) {
+      win.document.write(`
+        <html><head><meta name="viewport" content="width=device-width,initial-scale=1">
+        <title>长按图片保存</title>
+        <style>body{margin:0;background:#000;display:flex;align-items:center;justify-content:center;min-height:100vh;}
+        img{max-width:100%;height:auto;}
+        .tip{position:fixed;bottom:20px;left:0;right:0;text-align:center;color:white;font-size:14px;
+        background:rgba(0,0,0,0.6);padding:10px;}</style></head>
+        <body><img src="${img.src}"><div class="tip">长按图片保存到相册</div></body></html>
+      `);
+      win.document.close();
+      showToast('已打开图片，请长按保存');
+    } else {
+      showToast('⚠️ 请允许弹窗后重试');
+    }
+  } else {
+    // Android / 桌面：使用 a[download]
+    const a = document.createElement('a');
+    a.href = img.src;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showToast('✅ 已开始下载');
+  }
+}
+
+/* ============================================================
+ * 本地数据存储
+ * ============================================================ */
+const STORAGE_KEY = 'pool_water_report_v1';
+
+function saveData() {
+  try {
+    const data = getFormData();
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch (e) { /* ignore quota errors */ }
+}
+
+function loadData() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const d = JSON.parse(raw);
+    if (d.waterName) document.getElementById('waterName').value = d.waterName;
+    if (d.volume) document.getElementById('volume').value = d.volume;
+    if (d.volumeUnit) document.getElementById('volumeUnit').value = d.volumeUnit;
+    if (d.waterAddress) document.getElementById('waterAddress').value = d.waterAddress;
+    if (d.poolLength) document.getElementById('poolLength').value = d.poolLength;
+    if (d.poolWidth) document.getElementById('poolWidth').value = d.poolWidth;
+    if (d.deepDepth) document.getElementById('deepDepth').value = d.deepDepth;
+    if (d.shallowDepth) document.getElementById('shallowDepth').value = d.shallowDepth;
+    if (d.avgDepth) document.getElementById('avgDepth').value = d.avgDepth;
+    if (d.cycle) document.getElementById('cycle').value = d.cycle;
+    setRadio('structure', d.structure);
+    setRadio('nature', d.nature);
+    setRadio('source', d.source);
+    setRadio('cycleDevice', d.cycleDevice);
+    setRadio('heatingDevice', d.heatingDevice);
+    if (d.weekdayTraffic) document.getElementById('weekdayTraffic').value = d.weekdayTraffic;
+    if (d.weekendTraffic) document.getElementById('weekendTraffic').value = d.weekendTraffic;
+    if (d.testDate) document.getElementById('testDate').value = d.testDate;
+    if (d.maintenanceSuggestion) document.getElementById('maintenanceSuggestion').value = d.maintenanceSuggestion;
+    if (d.indicators) {
+      INDICATORS.forEach(ind => {
+        // 跳过自动计算字段，后面会重新计算
+        if (ind.kind === 'calculated') return;
+        if (d.indicators[ind.key] !== undefined && d.indicators[ind.key] !== '') {
+          document.getElementById('ind_' + ind.key).value = d.indicators[ind.key];
+        }
+      });
+      // 恢复后重新计算 SI
+      calculateSI();
+    }
+    // 恢复药剂多选
+    if (d.chemicals && d.chemicals.length) {
+      document.querySelectorAll('input[name="chemical"]').forEach(cb => {
+        if (d.chemicals.includes(cb.value)) {
+          cb.checked = true;
+          const label = cb.nextElementSibling;
+          label.style.background = 'linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%)';
+          label.style.color = 'white';
+          label.style.borderColor = 'var(--primary-light)';
+          label.style.boxShadow = '0 2px 6px rgba(46,134,193,0.25)';
+        }
+      });
+    }
+    return true;
+  } catch (e) {
+    console.error('Load data error:', e);
+    return false;
+  }
+}
+
+function clearAllData() {
+  if (!confirm('确定清除所有已填写的数据吗？\n此操作不可撤销。')) return;
+  localStorage.removeItem(STORAGE_KEY);
+  document.getElementById('waterName').value = '';
+  document.getElementById('volume').value = '';
+  document.getElementById('volumeUnit').value = '吨';
+  document.getElementById('waterAddress').value = '';
+  document.getElementById('poolLength').value = '';
+  document.getElementById('poolWidth').value = '';
+  document.getElementById('deepDepth').value = '';
+  document.getElementById('shallowDepth').value = '';
+  document.getElementById('avgDepth').value = '';
+  document.getElementById('cycle').value = '';
+  document.querySelectorAll('input[type="radio"]').forEach(r => r.checked = false);
+  INDICATORS.forEach(ind => {
+    document.getElementById('ind_' + ind.key).value = '';
+  });
+  // 重置 SI 输入框的 placeholder
+  document.getElementById('ind_si').placeholder = '自动计算';
+  document.getElementById('weekdayTraffic').value = '';
+  document.getElementById('weekendTraffic').value = '';
+  document.getElementById('maintenanceSuggestion').value = '';
+  document.querySelectorAll('input[name="chemical"]').forEach(cb => {
+    cb.checked = false;
+    const label = cb.nextElementSibling;
+    label.style.background = '#fafbfc';
+    label.style.color = '#5a6a7a';
+    label.style.borderColor = 'var(--border)';
+    label.style.boxShadow = 'none';
+  });
+  // 日期重置为今天
+  document.getElementById('testDate').valueAsDate = new Date();
+  updateAllBadges();
+  // 重置报告预览
+  document.getElementById('report').innerHTML = `
+    <div class="empty-state">
+      <div class="empty-icon">📋</div>
+      <p>数据已清除<br>请重新填写后生成报告</p>
+    </div>`;
+  document.getElementById('imageSection').style.display = 'none';
+  showToast('✅ 数据已清除');
+}
+
+/* ============================================================
+ * Toast 提示
+ * ============================================================ */
+let toastTimer = null;
+function showToast(msg) {
+  const toast = document.getElementById('toast');
+  toast.textContent = msg;
+  toast.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => toast.classList.remove('show'), 2500);
+}
+
+/* ============================================================
+ * 初始化
+ * ============================================================ */
+function init() {
+  // 渲染指标输入区
+  renderIndicators();
+
+  // 渲染药剂多选
+  renderChemicals();
+
+  // 默认日期为今天
+  document.getElementById('testDate').valueAsDate = new Date();
+
+  // 加载已保存的数据
+  const loaded = loadData();
+
+  // 更新所有指标的状态徽章
+  updateAllBadges();
+
+  // 全局 input/change 事件自动保存
+  document.querySelectorAll('input:not([type=radio]), select').forEach(el => {
+    el.addEventListener('input', saveData);
+    el.addEventListener('change', saveData);
+  });
+  document.querySelectorAll('input[type=radio]').forEach(el => {
+    el.addEventListener('change', saveData);
+  });
+
+  if (loaded) {
+    console.log('已恢复上次填写的数据');
+  }
+}
+
+init();
+
+/* ============================================================
+ * GitHub 云端同步
+ * ============================================================ */
+const GITHUB_REPO = 'jasonyao8116/pool-water-report';
+const GITHUB_DATA_FILE = 'data/records.json';
+const RECORDS_STORAGE_KEY = 'pool_records_local';
+
+function getGitHubToken() {
+  return localStorage.getItem('github_token') || '';
+}
+
+function saveGitHubToken() {
+  const token = document.getElementById('githubToken').value.trim();
+  if (!token) { showToast('⚠️ 请输入 Token'); return; }
+  localStorage.setItem('github_token', token);
+  showToast('✅ Token 已保存');
+  testGitHubConnection();
+}
+
+async function testGitHubConnection() {
+  const token = getGitHubToken();
+  const statusEl = document.getElementById('syncStatus');
+  if (!token) {
+    statusEl.innerHTML = '<span style="color:#e74c3c;">❌ 未配置 Token</span>';
+    return;
+  }
+  statusEl.innerHTML = '<span style="color:var(--text-light);">测试中…</span>';
+  try {
+    const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}`, {
+      headers: { 'Authorization': `token ${token}` }
+    });
+    if (res.ok) {
+      statusEl.innerHTML = '<span style="color:#27ae60;">✅ 连接成功！数据将自动同步到云端</span>';
+      updateSyncStats();
+    } else {
+      statusEl.innerHTML = '<span style="color:#e74c3c;">❌ 连接失败：Token 无效或权限不足</span>';
+    }
+  } catch (e) {
+    statusEl.innerHTML = '<span style="color:#e74c3c;">❌ 网络错误</span>';
+  }
+}
+
+async function updateSyncStats() {
+  const statsEl = document.getElementById('syncStats');
+  const records = await loadFromGitHub();
+  if (!records || records.length === 0) {
+    statsEl.innerHTML = '云端暂无记录';
+    return;
+  }
+  const pools = [...new Set(records.map(r => r.waterName))];
+  const lastDate = records.length > 0 ? records[records.length - 1].testDate || '未知' : '无';
+  statsEl.innerHTML = `
+    <div>📦 总记录数：<b>${records.length}</b> 条</div>
+    <div>🏊 覆盖池子：<b>${pools.length}</b> 个</div>
+    <div>📅 最近记录：<b>${lastDate}</b></div>
+  `;
+}
+
+async function fetchGitHubFile() {
+  const token = getGitHubToken();
+  const url = `https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_DATA_FILE}`;
+  const headers = { 'Accept': 'application/vnd.github+json' };
+  if (token) headers['Authorization'] = `token ${token}`;
+
+  const res = await fetch(url, { headers });
+  if (res.status === 404) return { content: null, sha: null };
+  if (!res.ok) throw new Error('GitHub API error: ' + res.status);
+  const data = await res.json();
+  let records = [];
+  if (data.content) {
+    const decoded = decodeBase64(data.content);
+    records = JSON.parse(decoded);
+  }
+  return { records, sha: data.sha };
+}
+
+function encodeBase64(str) {
+  return btoa(unescape(encodeURIComponent(str)));
+}
+
+function decodeBase64(str) {
+  return decodeURIComponent(escape(atob(str.replace(/\n/g, ''))));
+}
+
+async function saveRecordToGitHub(record) {
+  const token = getGitHubToken();
+  if (!token) return false;
+
+  try {
+    const { records: existingRecords, sha } = await fetchGitHubFile();
+    const records = existingRecords || [];
+    records.push(record);
+
+    const content = encodeBase64(JSON.stringify(records, null, 2));
+    const body = {
+      message: `添加检测记录: ${record.waterName} ${record.testDate}`,
+      content: content,
+    };
+    if (sha) body.sha = sha;
+
+    const res = await fetch(`https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_DATA_FILE}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `token ${token}`,
+        'Accept': 'application/vnd.github+json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body)
+    });
+
+    if (res.ok) {
+      // 保存到本地缓存
+      localStorage.setItem(RECORDS_STORAGE_KEY, JSON.stringify(records));
+      return true;
+    } else {
+      console.error('Save failed:', await res.text());
+      return false;
+    }
+  } catch (e) {
+    console.error('Save error:', e);
+    return false;
+  }
+}
+
+async function loadFromGitHub() {
+  const token = getGitHubToken();
+  // 先尝试从本地缓存读
+  const cached = localStorage.getItem(RECORDS_STORAGE_KEY);
+  try {
+    const { records } = await fetchGitHubFile();
+    if (records && records.length > 0) {
+      localStorage.setItem(RECORDS_STORAGE_KEY, JSON.stringify(records));
+      return records;
+    }
+  } catch (e) {
+    console.log('GitHub fetch failed, using cache');
+  }
+  return cached ? JSON.parse(cached) : [];
+}
+
+async function submitCurrentRecord() {
+  const data = getFormData();
+  if (!data.waterName) return;
+
+  const record = {
+    ...data,
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    savedAt: new Date().toISOString(),
+  };
+
+  // 先存本地
+  const localRecords = JSON.parse(localStorage.getItem(RECORDS_STORAGE_KEY) || '[]');
+  localRecords.push(record);
+  localStorage.setItem(RECORDS_STORAGE_KEY, JSON.stringify(localRecords));
+
+  // 同步到 GitHub
+  const token = getGitHubToken();
+  if (token) {
+    showToast('⏳ 正在同步到云端…');
+    const ok = await saveRecordToGitHub(record);
+    if (ok) {
+      showToast('✅ 已保存到云端');
+    } else {
+      showToast('⚠️ 已保存到本地，云端同步失败');
+    }
+  }
+}
+
+/* ============================================================
+ * 历史记录
+ * ============================================================ */
+let allRecords = [];
+
+async function loadHistoryRecords() {
+  const listEl = document.getElementById('historyList');
+  listEl.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-light);">加载中…</div>';
+
+  allRecords = await loadFromGitHub();
+
+  // 更新筛选下拉
+  const filterEl = document.getElementById('historyFilter');
+  const pools = [...new Set(allRecords.map(r => r.waterName).filter(Boolean))];
+  filterEl.innerHTML = '<option value="">全部池子</option>' +
+    pools.map(p => `<option value="${p}">${p}</option>`).join('');
+
+  renderHistory();
+  updateSyncStats();
+}
+
+function renderHistory() {
+  const filter = document.getElementById('historyFilter').value;
+  const listEl = document.getElementById('historyList');
+  const exportBtn = document.getElementById('btnExportExcel');
+
+  let records = allRecords.slice().reverse(); // 最新的在前
+  if (filter) records = records.filter(r => r.waterName === filter);
+
+  if (records.length === 0) {
+    listEl.innerHTML = `
+      <div class="empty-state">
+        <div class="empty-icon">📋</div>
+        <p>暂无历史记录</p>
+      </div>`;
+    exportBtn.style.display = 'none';
+    return;
+  }
+
+  exportBtn.style.display = 'block';
+
+  listEl.innerHTML = records.map((r, idx) => {
+    const date = r.testDate || '未知日期';
+    const pool = r.waterName || '未命名';
+    // 统计指标
+    let normal = 0, high = 0, low = 0;
+    if (r.indicators) {
+      INDICATORS.forEach(ind => {
+        const v = r.indicators[ind.key];
+        const status = evaluate(ind, v);
+        if (status === 'normal') normal++;
+        else if (status === 'high') high++;
+        else if (status === 'low') low++;
+      });
+    }
+    const chems = (r.chemicals && r.chemicals.length) ? r.chemicals.join('、') : '';
+
+    return `
+      <div class="history-card" data-idx="${idx}">
+        <div class="history-card-head">
+          <span class="history-pool">${pool}</span>
+          <span class="history-date">${date}</span>
+        </div>
+        <div class="history-stats">
+          <span class="hs-item"><span class="hs-label">pH</span>${r.indicators && r.indicators.ph ? r.indicators.ph : '—'}</span>
+          <span class="hs-item"><span class="hs-label">余氯</span>${r.indicators && r.indicators.freeChlorine ? r.indicators.freeChlorine : '—'}</span>
+          <span class="hs-item"><span class="hs-label">碱度</span>${r.indicators && r.indicators.alkalinity ? r.indicators.alkalinity : '—'}</span>
+          <span class="hs-item"><span class="hs-label">正常</span><b style="color:#27ae60">${normal}</b></span>
+          <span class="hs-item"><span class="hs-label">异常</span><b style="color:#e74c3c">${high + low}</b></span>
+        </div>
+        ${chems ? `<div style="margin-top:6px;font-size:11px;color:var(--primary-light);">💊 ${chems}</div>` : ''}
+        <div class="history-card-actions">
+          <button class="btn-view" onclick="viewRecord(${idx})">📄 查看详情</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+function viewRecord(idx) {
+  const filter = document.getElementById('historyFilter').value;
+  let records = allRecords.slice().reverse();
+  if (filter) records = records.filter(r => r.waterName === filter);
+  const r = records[idx];
+  if (!r) return;
+
+  // 填充到表单并切到预览
+  fillFormFromRecord(r);
+  // 切到预览 tab
+  document.getElementById('report').innerHTML = buildReportHTML();
+  document.getElementById('imageSection').style.display = 'none';
+  switchTab('preview');
+  showToast('已加载此记录到预览');
+}
+
+function fillFormFromRecord(r) {
+  if (r.waterName) document.getElementById('waterName').value = r.waterName;
+  if (r.volume) document.getElementById('volume').value = r.volume;
+  if (r.volumeUnit) document.getElementById('volumeUnit').value = r.volumeUnit;
+  if (r.waterAddress) document.getElementById('waterAddress').value = r.waterAddress;
+  if (r.poolLength) document.getElementById('poolLength').value = r.poolLength;
+  if (r.poolWidth) document.getElementById('poolWidth').value = r.poolWidth;
+  if (r.deepDepth) document.getElementById('deepDepth').value = r.deepDepth;
+  if (r.shallowDepth) document.getElementById('shallowDepth').value = r.shallowDepth;
+  if (r.avgDepth) document.getElementById('avgDepth').value = r.avgDepth;
+  if (r.cycle) document.getElementById('cycle').value = r.cycle;
+  if (r.structure) setRadio('structure', r.structure);
+  if (r.nature) setRadio('nature', r.nature);
+  if (r.source) setRadio('source', r.source);
+  if (r.cycleDevice) setRadio('cycleDevice', r.cycleDevice);
+  if (r.heatingDevice) setRadio('heatingDevice', r.heatingDevice);
+  if (r.weekdayTraffic) document.getElementById('weekdayTraffic').value = r.weekdayTraffic;
+  if (r.weekendTraffic) document.getElementById('weekendTraffic').value = r.weekendTraffic;
+  if (r.testDate) document.getElementById('testDate').value = r.testDate;
+  if (r.maintenanceSuggestion) document.getElementById('maintenanceSuggestion').value = r.maintenanceSuggestion;
+  if (r.indicators) {
+    INDICATORS.forEach(ind => {
+      if (r.indicators[ind.key] !== undefined) {
+        document.getElementById('ind_' + ind.key).value = r.indicators[ind.key];
+      }
+    });
+  }
+  // 恢复药剂
+  document.querySelectorAll('input[name="chemical"]').forEach(cb => {
+    cb.checked = false;
+    const label = cb.nextElementSibling;
+    label.style.background = '#fafbfc';
+    label.style.color = '#5a6a7a';
+    label.style.borderColor = 'var(--border)';
+    label.style.boxShadow = 'none';
+  });
+  if (r.chemicals && r.chemicals.length) {
+    document.querySelectorAll('input[name="chemical"]').forEach(cb => {
+      if (r.chemicals.includes(cb.value)) {
+        cb.checked = true;
+        const label = cb.nextElementSibling;
+        label.style.background = 'linear-gradient(135deg, var(--primary) 0%, var(--primary-light) 100%)';
+        label.style.color = 'white';
+        label.style.borderColor = 'var(--primary-light)';
+        label.style.boxShadow = '0 2px 6px rgba(46,134,193,0.25)';
+      }
+    });
+  }
+  updateAllBadges();
+}
+
+/* ============================================================
+ * 导出 Excel
+ * ============================================================ */
+function exportToExcel() {
+  if (typeof XLSX === 'undefined') {
+    showToast('⚠️ Excel 库未加载，请检查网络');
+    return;
+  }
+  if (allRecords.length === 0) {
+    showToast('⚠️ 没有记录可导出');
+    return;
+  }
+
+  // 构建 Excel 数据
+  const rows = allRecords.map(r => {
+    const row = {
+      '日期': r.testDate || '',
+      '水体名称': r.waterName || '',
+      '水体地址': r.waterAddress || '',
+      '水体水量': r.volume ? (r.volume + ' ' + r.volumeUnit) : '',
+      '长(m)': r.poolLength || '',
+      '宽(m)': r.poolWidth || '',
+      '深水区水深(m)': r.deepDepth || '',
+      '浅水区水深(m)': r.shallowDepth || '',
+      '平均水深(m)': r.avgDepth || '',
+      '循环周期(小时)': r.cycle || '',
+      '水体结构': r.structure || '',
+      '水体性质': r.nature || '',
+      '水体水源': r.source || '',
+      '循环设备': r.cycleDevice || '',
+      '加热设备': r.heatingDevice || '',
+      '客流量(工作日)': r.weekdayTraffic || '',
+      '客流量(节假日)': r.weekendTraffic || '',
+    };
+    // 指标
+    INDICATORS.forEach(ind => {
+      row[ind.name + (ind.unit ? '(' + ind.unit + ')' : '')] = (r.indicators && r.indicators[ind.key]) || '';
+    });
+    row['药剂选用'] = (r.chemicals && r.chemicals.length) ? r.chemicals.join('、') : '';
+    row['维护建议'] = r.maintenanceSuggestion || '';
+
+    // 评价
+    let stats = { normal: 0, high: 0, low: 0 };
+    if (r.indicators) {
+      INDICATORS.forEach(ind => {
+        const s = evaluate(ind, r.indicators[ind.key]);
+        if (s === 'normal') stats.normal++;
+        else if (s === 'high') stats.high++;
+        else if (s === 'low') stats.low++;
+      });
+    }
+    row['正常项'] = stats.normal;
+    row['偏高项'] = stats.high;
+    row['偏低项'] = stats.low;
+
+    return row;
+  });
+
+  // 生成 Excel
+  const ws = XLSX.utils.json_to_sheet(rows);
+  // 设置列宽
+  ws['!cols'] = Object.keys(rows[0]).map(k => ({ wch: Math.max(k.length * 2, 10) }));
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '检测记录');
+
+  const fileName = `水质检测历史记录_${new Date().toISOString().slice(0,10)}.xlsx`;
+  XLSX.writeFile(wb, fileName);
+  showToast('✅ Excel 已导出');
+}
+
+/* ============================================================
+ * Tab 切换增强：历史 tab 加载数据
+ * ============================================================ */
+const originalSwitchTab = switchTab;
+// Override tab click for history
+document.querySelectorAll('.tab').forEach(tab => {
+  tab.addEventListener('click', function() {
+    if (this.dataset.tab === 'history') {
+      loadHistoryRecords();
+    }
+    if (this.dataset.tab === 'settings') {
+      const token = getGitHubToken();
+      if (token) {
+        document.getElementById('githubToken').value = token;
+        testGitHubConnection();
+      }
+    }
+  });
+});
+
+// Override goGenerate to also save record
+const originalGoGenerate = goGenerate;
+window.goGenerate = function() {
+  originalGoGenerate();
+  // 自动保存记录
+  submitCurrentRecord();
+};
+
+/* ============================================================
+ * PWA：Manifest + Service Worker
+ * ============================================================ */
+// --- Manifest ---
+(function setupManifest() {
+  // 生成 SVG 图标（蓝色水波纹 + 水滴）
+  const iconSvg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+    <defs><linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1a5276"/><stop offset="100%" stop-color="#2e86c1"/>
+    </linearGradient></defs>
+    <rect width="512" height="512" rx="96" fill="url(#g)"/>
+    <path d="M120 300 Q190 260 260 300 T400 300" stroke="white" stroke-width="20" fill="none" stroke-linecap="round" opacity="0.9"/>
+    <path d="M120 360 Q190 320 260 360 T400 360" stroke="white" stroke-width="20" fill="none" stroke-linecap="round" opacity="0.65"/>
+    <path d="M256 100 C256 100 180 200 180 250 C180 292 214 320 256 320 C298 320 332 292 332 250 C332 200 256 100 256 100Z" fill="white" opacity="0.95"/>
+  </svg>`;
+  const iconUrl = 'data:image/svg+xml,' + encodeURIComponent(iconSvg);
+
+  const manifest = {
+    name: '泳池水质检测报告',
+    short_name: '水质检测',
+    description: '泳池水质检测与报告生成工具 - 株洲静水环保科技',
+    start_url: '.',
+    scope: '.',
+    display: 'standalone',
+    orientation: 'portrait',
+    background_color: '#1a5276',
+    theme_color: '#1a5276',
+    lang: 'zh-CN',
+    icons: [
+      { src: iconUrl, sizes: '192x192', type: 'image/svg+xml', purpose: 'any maskable' },
+      { src: iconUrl, sizes: '512x512', type: 'image/svg+xml', purpose: 'any maskable' }
+    ]
+  };
+
+  const blob = new Blob([JSON.stringify(manifest)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('link');
+  link.rel = 'manifest';
+  link.href = url;
+  document.head.appendChild(link);
+
+  // iOS apple-touch-icon
+  const appleIcon = document.createElement('link');
+  appleIcon.rel = 'apple-touch-icon';
+  appleIcon.href = iconUrl;
+  document.head.appendChild(appleIcon);
+})();
+
+// --- Service Worker ---
+(function setupServiceWorker() {
+  if (!('serviceWorker' in navigator)) return;
+
+  const swCode = `
+    const CACHE_NAME = 'pool-report-v1';
+    const PRECACHE = [self.location.href.replace(/\\/sw\\.js.*/, '')];
+
+    self.addEventListener('install', event => {
+      event.waitUntil(
+        caches.open(CACHE_NAME).then(cache => cache.addAll(PRECACHE)).catch(() => {})
+      );
+      self.skipWaiting();
+    });
+
+    self.addEventListener('activate', event => {
+      event.waitUntil(
+        caches.keys().then(keys =>
+          Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k)))
+        )
+      );
+      self.clients.claim();
+    });
+
+    self.addEventListener('fetch', event => {
+      if (event.request.method !== 'GET') return;
+      event.respondWith(
+        caches.match(event.request).then(cached => {
+          const networkFetch = fetch(event.request).then(response => {
+            if (response && response.status === 200) {
+              const clone = response.clone();
+              caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
+            }
+            return response;
+          }).catch(() => cached || null);
+          return cached || networkFetch;
+        })
+      );
+    });
+  `;
+
+  try {
+    const blob = new Blob([swCode], { type: 'application/javascript' });
+    const swUrl = URL.createObjectURL(blob);
+    navigator.serviceWorker.register(swUrl, { scope: '/' }).then(reg => {
+      console.log('Service Worker registered, scope:', reg.scope);
+    }).catch(err => {
+      console.log('SW registration skipped:', err.message);
+    });
+  } catch (e) {
+    console.log('SW not supported in this browser');
+  }
+})();
+</script>
+</body>
+</html>
