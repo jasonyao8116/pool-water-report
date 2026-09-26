@@ -203,18 +203,48 @@ body {
   display: block;
 }
 .water-name-option {
-  padding: 10px 14px;
+  padding: 0;
   font-size: 14px;
-  cursor: pointer;
   border-bottom: 1px solid #f0f0f0;
+  display: flex;
+  align-items: center;
 }
 .water-name-option:last-child {
   border-bottom: none;
 }
-.water-name-option:active,
-.water-name-option:hover {
+.water-name-option .option-label {
+  flex: 1;
+  padding: 10px 6px 10px 14px;
+  cursor: pointer;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.water-name-option .option-del {
+  width: 34px;
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #cbd5e0;
+  font-size: 15px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.water-name-option:active .option-label,
+.water-name-option .option-label:hover {
   background: #e8f4fd;
   color: var(--primary);
+}
+.water-name-option .option-del:hover {
+  color: #e74c3c;
+}
+.water-name-empty {
+  padding: 14px;
+  font-size: 13px;
+  color: var(--text-light, #a0aec0);
+  text-align: center;
 }
 
 /* ===== Form Elements ===== */
@@ -891,13 +921,8 @@ body {
           <button type="button" class="water-name-dropdown-btn" onclick="toggleWaterNameDropdown()" title="从列表选择">▼</button>
         </div>
         <div class="water-name-dropdown" id="waterNameDropdown">
-          <div class="water-name-option" onclick="selectWaterName('湘水湾综合馆成人池')">湘水湾综合馆成人池</div>
-          <div class="water-name-option" onclick="selectWaterName('湘水湾综合馆儿童池')">湘水湾综合馆儿童池</div>
-          <div class="water-name-option" onclick="selectWaterName('湘水湾户外池')">湘水湾户外池</div>
-          <div class="water-name-option" onclick="selectWaterName('湘水湾精品馆成人池')">湘水湾精品馆成人池</div>
-          <div class="water-name-option" onclick="selectWaterName('湘水湾精品馆儿童池')">湘水湾精品馆儿童池</div>
-          <div class="water-name-option" onclick="selectWaterName('天禧荟湘潭馆')">天禧荟湘潭馆</div>
-          <div class="water-name-option" onclick="selectWaterName('天禧荟湘潭馆儿童池')">天禧荟湘潭馆儿童池</div>
+          <!-- 选项由本地保存的泳池档案动态生成 -->
+          <div class="water-name-empty" id="waterNameEmpty" style="display:none;">暂无保存的泳池，生成报告后自动保存</div>
         </div>
       </div>
 
@@ -1199,15 +1224,241 @@ function toggleReportSection(id) {
   }
 }
 
-// ========== 水体名称下拉选择 ==========
+// ========== 泳池档案：名称+基础信息本地自动保存/联想/回填 ==========
+const POOL_PROFILES_KEY = 'pool_profiles_v1';
+
+// 基础信息字段（每次报告这些字段随泳池名称一起保存；不含检测指标、日期等单次数据）
+const PROFILE_FIELDS = [
+  'volume', 'volumeUnit', 'waterAddress',
+  'poolLength', 'poolWidth', 'deepDepth', 'shallowDepth',
+  'cycle', 'structure', 'nature', 'source',
+  'cycleDevice', 'heatingDevice', 'weekdayTraffic', 'weekendTraffic'
+];
+
+function loadPoolProfiles() {
+  try {
+    return JSON.parse(localStorage.getItem(POOL_PROFILES_KEY) || '{}');
+  } catch (e) { return {}; }
+}
+function persistPoolProfiles(profiles) {
+  localStorage.setItem(POOL_PROFILES_KEY, JSON.stringify(profiles));
+}
+
+// 渲染下拉选项；keyword 用于输入时过滤
+function renderWaterNameDropdown(keyword) {
+  const dd = document.getElementById('waterNameDropdown');
+  const empty = document.getElementById('waterNameEmpty');
+  const profiles = loadPoolProfiles();
+  let names = Object.keys(profiles).sort((a, b) =>
+    (profiles[b].updatedAt || 0) - (profiles[a].updatedAt || 0));
+  const kw = (keyword || '').trim().toLowerCase();
+  if (kw) names = names.filter(n => n.toLowerCase().indexOf(kw) >= 0);
+
+  // 清空旧选项，保留 empty 提示节点
+  dd.querySelectorAll('.water-name-option').forEach(el => el.remove());
+  if (!names.length) {
+    if (empty) {
+      empty.style.display = 'block';
+      empty.textContent = kw
+        ? '没有匹配的泳池，生成报告后将自动保存为新泳池'
+        : '暂无保存的泳池，生成报告后自动保存';
+    }
+    return;
+  }
+  if (empty) empty.style.display = 'none';
+
+  names.forEach(name => {
+    const row = document.createElement('div');
+    row.className = 'water-name-option';
+    const label = document.createElement('div');
+    label.className = 'option-label';
+    label.textContent = name;
+    label.title = name;
+    label.addEventListener('click', () => selectWaterName(name));
+    const del = document.createElement('div');
+    del.className = 'option-del';
+    del.textContent = '×';
+    del.title = '删除该泳池档案';
+    del.addEventListener('click', (e) => {
+      e.stopPropagation();
+      deletePoolProfile(name);
+    });
+    row.appendChild(label);
+    row.appendChild(del);
+    dd.appendChild(row);
+  });
+}
+
 function toggleWaterNameDropdown() {
   const dd = document.getElementById('waterNameDropdown');
+  const willShow = !dd.classList.contains('show');
+  if (willShow) renderWaterNameDropdown(document.getElementById('waterName').value);
   dd.classList.toggle('show');
 }
+
+// 选中泳池：填名称并自动回填基础信息
 function selectWaterName(name) {
+  const profiles = loadPoolProfiles();
+  const p = profiles[name];
   document.getElementById('waterName').value = name;
   document.getElementById('waterNameDropdown').classList.remove('show');
+  if (p) fillProfileFields(p);
 }
+
+function fillProfileFields(p) {
+  PROFILE_FIELDS.forEach(key => {
+    const el = document.getElementById(key);
+    if (!el) return;
+    if (el.tagName === 'SELECT') {
+      if (p[key] != null && p[key] !== '') el.value = p[key];
+    } else if (el.type === 'radio') {
+      /* 不在此分支 */
+    } else {
+      el.value = (p[key] != null ? p[key] : '');
+    }
+  });
+  ['structure', 'nature', 'source', 'cycleDevice', 'heatingDevice'].forEach(r => {
+    if (p[r]) setRadio(r, p[r]);
+  });
+  // 触发尺寸相关的联动计算
+  if (typeof calcAvgDepth === 'function') calcAvgDepth();
+}
+
+function deletePoolProfile(name) {
+  if (!confirm('确定删除「' + name + '」的档案吗？\n（仅删除本地保存的名称和基础信息，不影响已生成的历史报告）')) return;
+  const profiles = loadPoolProfiles();
+  delete profiles[name];
+  persistPoolProfiles(profiles);
+  renderWaterNameDropdown(document.getElementById('waterName').value);
+  // 同步删除到云端
+  syncPoolProfilesToCloud(profiles);
+}
+
+// 保存/更新当前泳池档案（生成报告时自动调用）
+function saveCurrentPoolProfile() {
+  const d = getFormData();
+  const name = d.waterName;
+  if (!name) return;
+  const profiles = loadPoolProfiles();
+  const entry = {};
+  PROFILE_FIELDS.forEach(key => { entry[key] = d[key]; });
+  const prev = profiles[name] || {};
+  entry.createdAt = prev.createdAt || Date.now();
+  entry.updatedAt = Date.now();
+  profiles[name] = entry;
+  persistPoolProfiles(profiles);
+  // 后台同步到 GitHub 云端（无Token/无网络时静默跳过）
+  syncPoolProfilesToCloud(profiles);
+}
+
+// 合并两份档案：同名称取 updatedAt 较新者
+function mergePoolProfiles(a, b) {
+  const out = Object.assign({}, a);
+  Object.keys(b || {}).forEach(name => {
+    if (!out[name] || (b[name].updatedAt || 0) > (out[name].updatedAt || 0)) {
+      out[name] = b[name];
+    }
+  });
+  return out;
+}
+
+// 打开页面时从云端拉取并合并（换设备/清缓存后档案自动恢复）
+async function pullPoolProfilesFromCloud() {
+  const token = getGitHubToken();
+  if (!token) return;
+  try {
+    const res = await fetch(
+      `https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_PROFILE_FILE}`,
+      { headers: { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github+json' } }
+    );
+    if (res.status === 404) return;
+    if (!res.ok) return;
+    const data = await res.json();
+    if (!data.content) return;
+    const remote = JSON.parse(decodeBase64(data.content));
+    const merged = mergePoolProfiles(loadPoolProfiles(), remote);
+    persistPoolProfiles(merged);
+    renderWaterNameDropdown(document.getElementById('waterName').value);
+  } catch (e) {
+    console.log('泳池档案云端拉取失败，使用本地数据');
+  }
+}
+
+// 保存档案到云端：先拉远端合并，再整体写回
+let profileSyncTimer = null;
+function syncPoolProfilesToCloud(localProfiles) {
+  const token = getGitHubToken();
+  if (!token) return;
+  clearTimeout(profileSyncTimer);
+  profileSyncTimer = setTimeout(async () => {
+    try {
+      const headers = {
+        'Authorization': `token ${token}`,
+        'Accept': 'application/vnd.github+json',
+        'Content-Type': 'application/json'
+      };
+      const fileUrl = `https://api.github.com/repos/${GITHUB_REPO}/contents/${GITHUB_PROFILE_FILE}`;
+
+      // 取远端最新版本和 sha
+      let remote = {}, sha = null;
+      const getRes = await fetch(fileUrl, { headers });
+      if (getRes.status === 404) {
+        // 文件不存在，待创建
+      } else if (getRes.ok) {
+        const f = await getRes.json();
+        sha = f.sha;
+        if (f.content) remote = JSON.parse(decodeBase64(f.content));
+      } else {
+        return;
+      }
+
+      const merged = mergePoolProfiles(localProfiles, remote);
+      persistPoolProfiles(merged);
+
+      const body = {
+        message: '同步泳池档案',
+        content: encodeBase64(JSON.stringify(merged, null, 2))
+      };
+      if (sha) body.sha = sha;
+
+      const putRes = await fetch(fileUrl, {
+        method: 'PUT', headers, body: JSON.stringify(body)
+      });
+      if (!putRes.ok) {
+        console.log('泳池档案云端同步失败:', putRes.status);
+      }
+    } catch (e) {
+      console.log('泳池档案云端同步错误:', e);
+    }
+  }, 800);
+}
+
+// 点击名称框：直接弹出全部泳池（不用输入）
+document.getElementById('waterName').addEventListener('focus', function () {
+  renderWaterNameDropdown('');
+  document.getElementById('waterNameDropdown').classList.add('show');
+});
+// 输入新名称时：实时联想过滤；完全匹配已有名称则自动回填
+document.addEventListener('input', function (e) {
+  if (e.target.id !== 'waterName') return;
+  const val = e.target.value;
+  const dd = document.getElementById('waterNameDropdown');
+  const profiles = loadPoolProfiles();
+  if (val && profiles[val]) {
+    fillProfileFields(profiles[val]);
+    dd.classList.remove('show');
+    return;
+  }
+  renderWaterNameDropdown(val);
+  dd.classList.add('show');
+});
+document.getElementById('waterName').addEventListener('blur', function () {
+  // 延迟关闭，以便点击下拉选项
+  setTimeout(() => {
+    document.getElementById('waterNameDropdown').classList.remove('show');
+  }, 200);
+});
+
 // 点击页面其他地方时关闭下拉
 document.addEventListener('click', function(e) {
   const dd = document.getElementById('waterNameDropdown');
@@ -1217,6 +1468,9 @@ document.addEventListener('click', function(e) {
     dd.classList.remove('show');
   }
 });
+
+// 初始化下拉
+renderWaterNameDropdown('');
 
 /* ============================================================
  * 指标定义
@@ -1813,6 +2067,8 @@ function buildRecommendationHTML(htmlOrRecs) {
  * ============================================================ */
 function buildReportHTML() {
   const d = getFormData();
+  // 自动保存/更新该泳池的名称与基础信息（仅本地）
+  saveCurrentPoolProfile();
   const waterName = d.waterName || '—';
   const volumeStr = d.volume ? (d.volume + ' ' + d.volumeUnit) : '—';
   const waterAddress = d.waterAddress || '—';
@@ -2231,7 +2487,11 @@ init();
  * ============================================================ */
 const GITHUB_REPO = 'jasonyao8116/pool-water-report';
 const GITHUB_DATA_FILE = 'data/records.json';
+const GITHUB_PROFILE_FILE = 'data/pool-profiles.json';
 const RECORDS_STORAGE_KEY = 'pool_records_local';
+
+// 启动时拉取云端泳池档案（放在常量定义之后，避免初始化时引用未声明常量）
+pullPoolProfilesFromCloud();
 
 function getGitHubToken() {
   return localStorage.getItem('github_token') || '';
@@ -2260,6 +2520,8 @@ async function testGitHubConnection() {
     if (res.ok) {
       statusEl.innerHTML = '<span style="color:#27ae60;">✅ 连接成功！数据将自动同步到云端</span>';
       updateSyncStats();
+      // 连接成功后立即拉取云端泳池档案
+      pullPoolProfilesFromCloud();
     } else {
       statusEl.innerHTML = '<span style="color:#e74c3c;">❌ 连接失败：Token 无效或权限不足</span>';
     }
